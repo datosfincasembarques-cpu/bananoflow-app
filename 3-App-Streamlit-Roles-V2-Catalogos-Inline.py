@@ -251,15 +251,126 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.dataframe(df)
 
 elif st.session_state.rol == "VIGILANCIA":
-    st.title(f"Vigilancia - {st.session_state.id_finca}")
+    st.title(f"🚧 Vigilancia / Caseta - Finca {st.session_state.id_finca}")
+    st.markdown("Registra ENTRADA cuando llega y SALIDA cuando se va cargado.")
+    
     df_orden_fin, _ = get_df_safe("Orden_Fincas")
+    df_ord, _ = get_df_safe("OrdenesCarga")
+    
+    # Mostrar ordenes de su finca
     if not df_orden_fin.empty and st.session_state.id_finca:
         filtradas = df_orden_fin[df_orden_fin['id_finca']==st.session_state.id_finca]
-        st.dataframe(filtradas)
-    st.file_uploader("Foto Tractor")
-    st.file_uploader("Foto Caja")
-    if st.button("Registrar Entrada"):
-        st.success("Entrada registrada")
+        # Unir con datos de orden
+        if not df_ord.empty and not filtradas.empty:
+            merged = filtradas.merge(df_ord, on='id_orden', how='left')
+            st.dataframe(merged[['id_orden','id_finca','orden_visita','estado_carga','id_operador','id_tractor','id_caja1','estado']].tail(20))
+        else:
+            st.dataframe(filtradas)
+    else:
+        st.info("No hay ordenes para esta finca aun")
+    
+    st.divider()
+    tab_entrada, tab_salida = st.tabs(["📥 REGISTRAR ENTRADA", "📤 REGISTRAR SALIDA"])
+    
+    with tab_entrada:
+        st.subheader("Entrada de Unidad Vacia")
+        col1, col2 = st.columns(2)
+        with col1:
+            orden_sel = st.selectbox("Selecciona Orden", df_orden_fin['id_orden'].unique().tolist() if not df_orden_fin.empty else ["OC-..."], key="ord_ent")
+            hora_ent = st.time_input("Hora Entrada")
+            km_ent = st.text_input("Kilometraje / Odometro entrada")
+        with col2:
+            foto_tractor_ent = st.file_uploader("Foto Tractor (placas)", key="foto_t_ent")
+            foto_caja_ent = st.file_uploader("Foto Caja (placas)", key="foto_c_ent")
+            foto_lic_ent = st.file_uploader("Foto Licencia Operador", key="foto_lic_ent")
+            obs_ent = st.text_area("Observaciones entrada (ej: caja sucia, llanta baja)")
+        
+        if st.button("✅ Registrar ENTRADA", type="primary"):
+            try:
+                ws_bit = sh.worksheet("Bitacora_Vigilancia")
+                # Crear registro entrada
+                append_row_dict_safe(ws_bit, {
+                    "id_bitacora": f"ENT-{orden_sel}-{datetime.now().strftime('%H%M%S')}",
+                    "id_orden": orden_sel,
+                    "id_finca": st.session_state.id_finca,
+                    "tipo_movimiento": "ENTRADA",
+                    "fecha_hora": datetime.now().isoformat(),
+                    "hora_manual": str(hora_ent),
+                    "odometro": km_ent,
+                    "observaciones": obs_ent,
+                    "id_usuario": f"VIG-{st.session_state.id_finca}",
+                    "fotos_links": ""
+                })
+                # Actualizar estado en Orden_Fincas a EN_FINCA
+                ws_of = sh.worksheet("Orden_Fincas")
+                try:
+                    cell = ws_of.find(f"{orden_sel}-{st.session_state.id_finca}")
+                    ws_of.update_cell(cell.row, 5, "EN_FINCA") # estado_carga
+                except:
+                    pass
+                st.success(f"Entrada {orden_sel} registrada {datetime.now().strftime('%H:%M')} - Unidad en finca")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Error: {e} - Asegurate que existe hoja Bitacora_Vigilancia")
+
+    with tab_salida:
+        st.subheader("Salida de Unidad Cargada")
+        col1, col2 = st.columns(2)
+        with col1:
+            orden_sal = st.selectbox("Selecciona Orden (cargada)", df_orden_fin['id_orden'].unique().tolist() if not df_orden_fin.empty else ["OC-..."], key="ord_sal")
+            hora_sal = st.time_input("Hora Salida")
+            sellos = st.text_input("No. Sellos / Precintos")
+            cajas_sal = st.number_input("Cajas que se lleva (verificar con Planta)", value=0)
+        with col2:
+            foto_sellos = st.file_uploader("Foto Sellos / Precintos", key="foto_sellos")
+            foto_caja_cargada = st.file_uploader("Foto Caja Cargada / Cerrada", key="foto_c_sal")
+            foto_temp = st.file_uploader("Foto Thermografo (opcional)", key="foto_temp_sal")
+            obs_sal = st.text_area("Observaciones salida")
+        
+        if st.button("✅ Registrar SALIDA", type="primary"):
+            try:
+                ws_bit = sh.worksheet("Bitacora_Vigilancia")
+                append_row_dict_safe(ws_bit, {
+                    "id_bitacora": f"SAL-{orden_sal}-{datetime.now().strftime('%H%M%S')}",
+                    "id_orden": orden_sal,
+                    "id_finca": st.session_state.id_finca,
+                    "tipo_movimiento": "SALIDA",
+                    "fecha_hora": datetime.now().isoformat(),
+                    "hora_manual": str(hora_sal),
+                    "odometro": sellos,
+                    "observaciones": f"Cajas:{cajas_sal} {obs_sal}",
+                    "id_usuario": f"VIG-{st.session_state.id_finca}",
+                    "fotos_links": ""
+                })
+                ws_of = sh.worksheet("Orden_Fincas")
+                try:
+                    cell = ws_of.find(f"{orden_sal}-{st.session_state.id_finca}")
+                    ws_of.update_cell(cell.row, 5, "CARGADO_SALIO")
+                except:
+                    pass
+                st.success(f"Salida {orden_sal} registrada - {cajas_sal} cajas - Sellos {sellos}")
+                # Verificar si es ultima finca
+                try:
+                    df_of = pd.DataFrame(ws_of.get_all_records())
+                    pendientes = df_of[(df_of['id_orden']==orden_sal) & (~df_of['estado_carga'].isin(['CARGADO_SALIO','CARGADO']))]
+                    if pendientes.empty:
+                        ws_oc = sh.worksheet("OrdenesCarga")
+                        cell_oc = ws_oc.find(orden_sal)
+                        ws_oc.update_cell(cell_oc.row, 11, "CERRADA") # estado
+                        st.info("¡Era la ultima finca! Orden CERRADA automaticamente")
+                except:
+                    pass
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    # Historial
+    with st.expander("📜 Historial Entradas/Salidas de hoy"):
+        df_bit, _ = get_df_safe("Bitacora_Vigilancia")
+        if not df_bit.empty:
+            if st.session_state.id_finca:
+                df_bit = df_bit[df_bit['id_finca']==st.session_state.id_finca]
+            st.dataframe(df_bit.tail(30))
+
 
 elif st.session_state.rol == "JEFE_PLANTA":
     st.title(f"Planta - {st.session_state.id_finca}")
