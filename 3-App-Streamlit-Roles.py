@@ -479,7 +479,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.error(str(e))
 
         st.divider()
-        st.markdown("### 🗺️ Ruta y Cliente - Todo a la vista")
+        st.markdown("### 🗺️ Ruta y Cliente")
         col_r1, col_r2, col_r3 = st.columns([2,1,1])
         with col_r1:
             fincas_sel = st.multiselect("Fincas a cargar (orden visita)", fin_nombres if fin_nombres else [], help="Selecciona en orden: Esperanza, San Jorge...")
