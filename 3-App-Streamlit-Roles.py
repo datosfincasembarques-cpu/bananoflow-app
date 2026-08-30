@@ -1,3 +1,6 @@
+# ==============================================================================
+# 1. CONFIGURACIÓN INICIAL Y LIBRERÍAS
+# ==============================================================================
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -7,22 +10,32 @@ from googleapiclient.discovery import build
 
 st.set_page_config(page_title="Control Operativo - Embarques V5", layout="wide", page_icon="🍌")
 
-# ==========================================
-# CONEXIÓN A GOOGLE SHEETS
-# ==========================================
+
+# ==============================================================================
+# 2. CONEXIÓN Y CARGA SEGURA DE DATOS (GOOGLE SHEETS)
+# ==============================================================================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
 
 @st.cache_resource
-def get_db():
+def get_gspread_client():
     creds_dict = dict(st.secrets["google_credentials"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
+    return client
+
+def get_db():
+    client = get_gspread_client()
     sh = client.open(SPREADSHEET_NAME)
-    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service = build('drive', 'v3', credentials=client.auth)
     return client, sh, drive_service
 
 def get_df_safe(sheet_name):
+    try:
+        _, sh, _ = get_db()
+    except Exception as e:
+        return pd.DataFrame(dtype=str), None
+
     mapa = {
         "Tractos": ["Tractos","Tractocamiones"],
         "Tractocamiones": ["Tractocamiones","Tractos"],
@@ -33,23 +46,25 @@ def get_df_safe(sheet_name):
     for name in candidatos:
         try:
             ws = sh.worksheet(name)
-            df = pd.DataFrame(ws.get_all_records(), dtype=str)
+            data = ws.get_all_records()
+            df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
             df.columns = [str(c).strip() for c in df.columns]
             return df, ws
-        except: continue
+        except: 
+            continue
+            
     try:
         for ws in sh.worksheets():
             tl = ws.title.lower()
             sl = sheet_name.lower()
-            if "tracto" in sl and "tracto" in tl:
-                df = pd.DataFrame(ws.get_all_records(), dtype=str)
-                df.columns=[str(c).strip() for c in df.columns]
+            if sl in tl or tl in sl:
+                data = ws.get_all_records()
+                df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
+                df.columns = [str(c).strip() for c in df.columns]
                 return df, ws
-            if "caja" in sl and "caja" in tl:
-                df = pd.DataFrame(ws.get_all_records(), dtype=str)
-                df.columns=[str(c).strip() for c in df.columns]
-                return df, ws
-    except: pass
+    except: 
+        pass
+        
     return pd.DataFrame(dtype=str), None
 
 def ensure_columns_exist(ws, cols):
@@ -74,22 +89,25 @@ def append_row_dict_safe(ws, data_dict):
 
 try:
     client, sh, drive_service = get_db()
-    conectado=True
+    conectado = True
+    err_conexion = ""
 except Exception as e:
-    conectado=False
-    err_conexion=str(e)
+    conectado = False
+    err_conexion = str(e)
 
-# ==========================================
-# GESTIÓN DE SESIÓN Y AUTENTICACIÓN
-# ==========================================
+
+# ==============================================================================
+# 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
+# ==============================================================================
 ROLES = ["OFICINA_CENTRAL", "VIGILANCIA", "JEFE_PLANTA", "ESTIBA"]
 if 'rol' not in st.session_state:
     for k in ["rol", "id_finca", "usuario", "username", "nombre_usuario", "id_usuario", "finca_asignada", "menu_oficina"]:
         st.session_state[k] = None
 
-# ==========================================
-# BARRA LATERAL (CONTROL DE ACCESO INTELIGENTE)
-# ==========================================
+
+# ==============================================================================
+# 4. BARRA LATERAL (CONTROL DE ACCESO INTELIGENTE)
+# ==============================================================================
 with st.sidebar:
     st.markdown("### 🔐 Control de Acceso")
     if conectado: 
@@ -100,7 +118,6 @@ with st.sidebar:
     if st.session_state.rol is None:
         rol_seleccionado = st.selectbox("Seleccione su Rol", ROLES)
         
-        # Cargar usuarios desde Google Sheets de forma segura
         df_usuarios_raw, _ = get_df_safe("Usuarios")
         if df_usuarios_raw.empty:
             df_usuarios = pd.DataFrame([{
@@ -160,7 +177,6 @@ with st.sidebar:
         password_input = st.text_input("Contraseña", type="password")
         
         if st.button("Ingresar al Sistema", use_container_width=True):
-            # Valida contra la contraseña real de la BD o comodines operativos
             acceso_valido = password_input in ["123", "1234", pass_bd] or password_input.lower() == username.lower()
             if acceso_valido:
                 st.session_state.rol = rol_real or rol_seleccionado
@@ -193,9 +209,10 @@ with st.sidebar:
 if st.session_state.rol is None:
     st.stop()
 
-# ==========================================
-# FUNCIONES AUXILIARES (SEPARACIÓN LIMPIA SIN CONCATENAR)
-# ==========================================
+
+# ==============================================================================
+# 5. FUNCIONES AUXILIARES DE MAPEO Y LISTAS
+# ==============================================================================
 def lista_simple_no_concat(df, id_key, nombre_key):
     if df.empty: 
         return [], {}
@@ -234,11 +251,11 @@ def lista_placas_no_concat(df):
         mapa[pla] = r.to_dict()
     return sorted(lista), mapa
 
-# ==========================================
-# CUERPO PRINCIPAL - ROL: OFICINA CENTRAL
-# ==========================================
+
+# ==============================================================================
+# 6. CUERPO PRINCIPAL - ROL: OFICINA CENTRAL
+# ==============================================================================
 if st.session_state.rol == "OFICINA_CENTRAL":
-    # Carga de tablas maestras operativas
     df_emp, _ = get_df_safe("Empresas")
     df_fin, _ = get_df_safe("Fincas")
     df_lin, _ = get_df_safe("LineasTransporte")
@@ -257,7 +274,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
     emp_nombres, emp_mapa = lista_simple_no_concat(df_emp, "id_empresa", "razon_social")
 
-    # Cabecera superior adaptativa
     col_title, col_emp_top = st.columns([2, 2])
     with col_title:
         st.markdown(f"<h2 style='margin:0;'>Oficina Central - Panel de Control</h2>", unsafe_allow_html=True)
@@ -272,6 +288,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     st.markdown("---")
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
+    # --------------------------------------------------------------------------
+    # 6.1 Submódulo: 📦 Crear Orden
+    # --------------------------------------------------------------------------
     if menu_sel == "📦 Crear Orden":
         st.subheader("📝 Generación de Nueva Orden de Carga")
         
@@ -315,9 +334,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             if df_cj_filt.empty: df_cj_filt = df_cj_u
         else: df_cj_filt = df_cj_u
 
-        # ==========================================
-        # SELECCIÓN DE OPERADOR (VISTA LIMPIA EN COLUMNAS)
-        # ==========================================
         st.markdown("#### 👤 Operador Asignado")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         with c1:
@@ -337,9 +353,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             tel_val = str(op_data.get('telefono', ''))
             st.text_input("Tel", value=tel_val, disabled=True, key="tel_hibrido", label_visibility="collapsed")
 
-        # ==========================================
-        # SELECCIÓN DE TRACTO Y CAJAS (COLUMNAS LIMPIAS)
-        # ==========================================
         st.markdown(f"#### 🚛 Equipamiento Asignado - {lin_sel}")
         tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_filt)
         cj_placas, cj_mapa_placa = lista_placas_no_concat(df_cj_filt)
@@ -430,7 +443,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     
                     append_row_dict_safe(ws_ord, row)
                     
-                    # Registrar ruta para las fincas seleccionadas
                     ws_ruta = sh.worksheet("Orden_Fincas")
                     for idx, fid in enumerate(ids_fin_ruta):
                         append_row_dict_safe(ws_ruta, {
@@ -446,6 +458,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
 
+    # --------------------------------------------------------------------------
+    # 6.2 Submódulo: 📦 Órdenes Expedidas
+    # --------------------------------------------------------------------------
     elif menu_sel == "📦 Órdenes Expedidas":
         st.subheader("📦 Órdenes de Carga Registradas")
         if not df_oc.empty:
@@ -461,6 +476,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         else:
             st.info("No hay órdenes expedidas registradas en este momento.")
 
+    # --------------------------------------------------------------------------
+    # 6.3 Submódulo: ✏️ Remisión/Factura
+    # --------------------------------------------------------------------------
     elif menu_sel == "✏️ Remisión/Factura":
         st.subheader("✏️ Edición Rápida de Remisiones y Facturas")
         df_oc_edit, _ = get_df_safe("OrdenesCarga")
@@ -499,6 +517,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         except Exception as e:
                             st.error(f"Error al actualizar: {e}")
 
+    # --------------------------------------------------------------------------
+    # 6.4 Submódulo: 🗺️ Seguimiento
+    # --------------------------------------------------------------------------
     elif menu_sel == "🗺️ Seguimiento":
         st.subheader("🗺️ Seguimiento General de Órdenes por Finca")
         if not df_of.empty:
@@ -506,9 +527,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         else:
             st.info("No hay registros de seguimiento activos.")
 
-# ==========================================
-# ROLES OPERATIVOS ADICIONALES (VIGILANCIA / PLANTA)
-# ==========================================
+
+# ==============================================================================
+# 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
+# ==============================================================================
 elif st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     df_of, _ = get_df_safe("Orden_Fincas")
