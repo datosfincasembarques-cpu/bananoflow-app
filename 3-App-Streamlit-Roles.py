@@ -13,7 +13,7 @@ st.set_page_config(page_title="Control Operativo - Embarques V5", layout="wide",
 
 
 # ==============================================================================
-# 2. CONEXIÓN Y CARGA SEGURA DE DATOS (CON TOLERANCIA A FALLOS DE RED)
+# 2. CONEXIÓN Y CARGA SEGURA DE DATOS (CON CACHÉ Y PROTECCIÓN CONTRA LÍMITE 429)
 # ==============================================================================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
@@ -31,9 +31,10 @@ def get_db():
     drive_service = build('drive', 'v3', credentials=creds)
     return client, sh, drive_service
 
-def get_df_safe(sheet_name, max_retries=3):
-    """Intenta descargar la tabla con reintentos automáticos si falla la señal móvil."""
+@st.cache_data(ttl=60) # Guarda en caché por 60 segundos para evitar saturar la API de Google (Error 429)
+def get_df_safe_cached(sheet_name):
     intentos = 0
+    max_retries = 3
     while intentos < max_retries:
         try:
             _, sh, _ = get_db()
@@ -50,7 +51,7 @@ def get_df_safe(sheet_name, max_retries=3):
                     data = ws.get_all_records()
                     df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
                     df.columns = [str(c).strip() for c in df.columns]
-                    return df, ws
+                    return df
                 except: 
                     continue
                     
@@ -61,49 +62,17 @@ def get_df_safe(sheet_name, max_retries=3):
                     data = ws.get_all_records()
                     df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
                     df.columns = [str(c).strip() for c in df.columns]
-                    return df, ws
-            return pd.DataFrame(dtype=str), None
+                    return df
+            return pd.DataFrame(dtype=str)
         except Exception as e:
             intentos += 1
             if intentos >= max_retries:
-                st.warning(f"⚠️ Sin conexión estable al intentar cargar '{sheet_name}'. Verifique su señal móvil.")
-                return pd.DataFrame(dtype=str), None
-            time.sleep(1.5) # Espera 1.5 segundos antes de reintentar
-
-def ensure_columns_exist(ws, cols):
-    try:
-        headers = [str(h).strip() for h in ws.row_values(1)]
-        for col in cols:
-            if col not in headers:
-                ws.update_cell(1, len(headers)+1, col)
-                headers.append(col)
-    except: pass
-
-def append_row_dict_safe(ws, data_dict, max_retries=3):
-    """Intenta guardar el registro con reintentos si la red parpadea al enviar."""
-    intentos = 0
-    while intentos < max_retries:
-        try:
-            ensure_columns_exist(ws, list(data_dict.keys()))
-            headers = [str(h).strip() for h in ws.row_values(1)]
-            row = [str(data_dict.get(h,"")) for h in headers]
-            ws.append_row(row, value_input_option='USER_ENTERED')
-            return True
-        except Exception as e:
-            intentos += 1
-            if intentos >= max_retries:
-                st.error(f"❌ Error de red al guardar tras {max_retries} intentos: {e}. Sus datos están seguros en pantalla, intente de nuevo.")
-                return False
+                return pd.DataFrame(dtype=str)
             time.sleep(2)
+    return pd.DataFrame(dtype=str)
 
-try:
-    client, sh, drive_service = get_db()
-    conectado = True
-    err_conexion = ""
-except Exception as e:
-    conectado = False
-    err_conexion = str(e)
-
+def get_df_safe(sheet_name, max_retries=3):
+    return get_df_safe_cached(sheet_name)
 
 # ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
