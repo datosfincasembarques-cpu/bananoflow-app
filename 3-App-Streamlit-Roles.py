@@ -790,49 +790,15 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(f"Error al registrar salida: {e}")
                     
-    # --------------------------------------------------------------------------
-    # Sección 6.6: Seguimiento en Oficina Central
-    # --------------------------------------------------------------------------
-    elif menu_sel == "🗺️ Seguimiento":
-        st.markdown("<h2 style='color: #2c3e50;'>📊 Seguimiento de Operaciones y Embarques</h2>", unsafe_allow_html=True)
-        st.caption("Consulta en tiempo real el estatus de las órdenes y el avance en las distintas fincas de la ruta.")
-        
-        try:
-            _, sh, _ = get_db()
-            ws_of = sh.worksheet("Orden_Fincas")
-            data_of = ws_of.get_all_records()
-            
-            if data_of:
-                df_of = pd.DataFrame(data_of)
-                
-                col_f1, col_f2 = st.columns(2)
-                with col_f1:
-                    fincas_disponibles = ["TODAS"] + sorted(df_of['id_finca'].astype(str).unique().tolist())
-                    filtro_finca_seg = st.selectbox("Filtrar por Finca:", fincas_disponibles, key="seg_filtro_finca")
-                with col_f2:
-                    estados_disponibles = ["TODOS"] + sorted(df_of['estado_carga'].astype(str).unique().tolist())
-                    filtro_estado_seg = st.selectbox("Filtrar por Estado:", estados_disponibles, key="seg_filtro_estado")
-                
-                df_filtrado = df_of.copy()
-                if filtro_finca_seg != "TODAS":
-                    df_filtrado = df_filtrado[df_filtrado['id_finca'].astype(str) == str(filtro_finca_seg)]
-                if filtro_estado_seg != "TODOS":
-                    df_filtrado = df_filtrado[df_filtrado['estado_carga'].astype(str) == str(filtro_estado_seg)]
-                
-                st.markdown(f"**Total de registros encontrados:** {len(df_filtrado)}")
-                st.dataframe(df_filtrado, use_container_width=True)
-            else:
-                st.info("ℹ️ No hay registros en la hoja Orden_Fincas.")
-        except Exception as e:
-            st.error(f"Error al cargar los datos de seguimiento: {e}")
-            
-# ==============================================================================
+    # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
 elif st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     st.markdown("Vehículos en Finca / Tránsito")
     
+    # Forzar la recarga limpia limpiando la caché y obteniendo los datos actualizados
+    st.cache_data.clear()
     df_of, _ = get_df_safe("Orden_Fincas")
     finca_actual = str(st.session_state.finca_asignada)
     
