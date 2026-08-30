@@ -902,21 +902,36 @@ elif st.session_state.rol == "VIGILANCIA":
         id_linea_raw = str(info_orden.get('id_linea', '')).strip()
         id_caja1_raw = str(info_orden.get('id_caja1', '')).strip()
 
-        # Traducir Operador a Nombre Completo
+        # Traducir Operador a Nombre Completo (Búsqueda robusta por contenido de fila/texto completo)
         nombre_operador = id_operador_raw or "No especificado"
         if not df_op_m.empty and id_operador_raw:
-            col_id_op = next((c for c in df_op_m.columns if 'id' in c.lower()), df_op_m.columns[0])
-            col_nom_op = next((c for c in df_op_m.columns if 'nombre' in c.lower() or 'operador' in c.lower()), df_op_m.columns[1] if len(df_op_m.columns) > 1 else col_id_op)
-            match_op = df_op_m[df_op_m[col_id_op].astype(str).str.upper() == id_operador_raw.upper()]
-            if not match_op.empty:
-                nombre_operador = str(match_op.iloc[0].get(col_nom_op, id_operador_raw))
+            for idx, row in df_op_m.iterrows():
+                row_str = " ".join([str(val) for val in row.values])
+                if id_operador_raw.upper() in row_str.upper():
+                    posibles_textos = [str(val) for val in row.values if len(str(val)) > 5 and not str(val).isdigit() and not str(val).startswith('LIN-') and not str(val).startswith('OP')]
+                    if posibles_textos:
+                        nombre_operador = posibles_textos[0]
+                        break
+            
+            if nombre_operador == id_operador_raw:
+                for col in df_op_m.columns:
+                    match_op = df_op_m[df_op_m[col].astype(str).str.strip().str.upper() == id_operador_raw.strip().upper()]
+                    if not match_op.empty:
+                        fila_match = match_op.iloc[0]
+                        for c_text in df_op_m.columns:
+                            val_txt = str(fila_match[c_text])
+                            if any(w in str(c_text).lower() for w in ['nombre', 'operador', 'chofer']) or len(val_txt) > 6:
+                                if not val_txt.startswith('OP') and not val_txt.isdigit():
+                                    nombre_operador = val_txt
+                                    break
+                        break
 
         # Traducir Línea de Transporte
         nombre_linea = id_linea_raw or "No especificado"
         if not df_lin_m.empty and id_linea_raw:
             col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
             col_nom_lin = next((c for c in df_lin_m.columns if 'razon' in c.lower() or 'nombre' in c.lower()), df_lin_m.columns[1] if len(df_lin_m.columns) > 1 else col_id_lin)
-            match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.upper() == id_linea_raw.upper()]
+            match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.strip().str.upper() == id_linea_raw.strip().upper()]
             if not match_lin.empty:
                 nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
 
@@ -925,7 +940,7 @@ elif st.session_state.rol == "VIGILANCIA":
         placas_tractor = "No especificado"
         if not df_tr_unif.empty and id_tractor_raw:
             col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
-            match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.upper() == id_tractor_raw.upper()]
+            match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
             if not match_tr.empty:
                 r_tr = match_tr.iloc[0]
                 marca = str(r_tr.get('marca', r_tr.get('modelo', 'Unidad')))
@@ -937,7 +952,7 @@ elif st.session_state.rol == "VIGILANCIA":
         desc_caja1 = id_caja1_raw or "No especificado"
         if not df_cj_unif.empty and id_caja1_raw:
             col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
-            match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.upper() == id_caja1_raw.upper()]
+            match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.strip().str.upper() == id_caja1_raw.strip().upper()]
             if not match_cj.empty:
                 r_cj = match_cj.iloc[0]
                 placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
