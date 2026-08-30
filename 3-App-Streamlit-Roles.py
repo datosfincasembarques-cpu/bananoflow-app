@@ -532,7 +532,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.error(f"Error al actualizar: {e}")
 
     # --------------------------------------------------------------------------
-    # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
+    # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo con Combo de Líneas)
     # --------------------------------------------------------------------------
     elif menu_sel == "⚙️ Catálogos Maestros":
         st.subheader("⚙️ Administración de Catálogos Maestros")
@@ -563,7 +563,14 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             with st.form(key=f"form_agregar_{catalogo_sel}"):
                 nuevos_datos = {}
                 for col in cols_cat:
-                    nuevos_datos[col] = st.text_input(f"Campo: {col}", key=f"add_{catalogo_sel}_{col}")
+                    # Si estamos agregando en Tractos/Tractocamiones y el campo es id_linea, usamos un selector desplegable
+                    if catalogo_sel in ["Tractos", "Tractocamiones"] and col.lower() == "id_linea":
+                        lin_nombres, lin_mapa = lista_simple_no_concat(df_lin, "id_linea", "razon_social")
+                        lin_sel_add = st.selectbox("Línea de Transporte", lin_nombres if lin_nombres else ["Sin líneas"], key=f"add_{catalogo_sel}_{col}_combo")
+                        lin_data_add = lin_mapa.get(lin_sel_add, {})
+                        nuevos_datos[col] = str(lin_data_add.get('id_linea', '') or lin_sel_add)
+                    else:
+                        nuevos_datos[col] = st.text_input(f"Campo: {col}", key=f"add_{catalogo_sel}_{col}")
                 
                 btn_guardar_nuevo = st.form_submit_button("💾 Guardar Registro en Google Sheets", type="primary")
                 if btn_guardar_nuevo:
@@ -594,7 +601,24 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.markdown(f"Editando registro: **{id_a_modificar}**")
                         datos_editados = {}
                         for k, v in datos_fila.items():
-                            datos_editados[k] = st.text_input(f"Modificar {k}", value=str(v), key=f"edit_{catalogo_sel}_{k}")
+                            # Si es Tractos/Tractocamiones y el campo es id_linea, transformarlo en un combo con las líneas existentes
+                            if catalogo_sel in ["Tractos", "Tractocamiones"] and k.lower() == "id_linea":
+                                lin_nombres, lin_mapa = lista_simple_no_concat(df_lin, "id_linea", "razon_social")
+                                
+                                # Buscar la etiqueta actual para preseleccionar en el combo si coincide
+                                current_val = str(v).strip()
+                                default_idx = 0
+                                for idx_l, lname in enumerate(lin_nombres):
+                                    ldata = lin_mapa.get(lname, {})
+                                    if str(ldata.get('id_linea', '')).strip().upper() == current_val.upper() or lname.upper() == current_val.upper():
+                                        default_idx = idx_l
+                                        break
+                                        
+                                lin_sel_mod = st.selectbox("Línea de Transporte", lin_nombres if lin_nombres else ["Sin líneas"], index=default_idx, key=f"edit_{catalogo_sel}_{k}_combo")
+                                lin_data_mod = lin_mapa.get(lin_sel_mod, {})
+                                datos_editados[k] = str(lin_data_mod.get('id_linea', '') or lin_sel_mod)
+                            else:
+                                datos_editados[k] = st.text_input(f"Modificar {k}", value=str(v), key=f"edit_{catalogo_sel}_{k}")
                         
                         col_btn1, col_btn2 = st.columns(2)
                         with col_btn1:
