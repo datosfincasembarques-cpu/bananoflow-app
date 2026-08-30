@@ -831,7 +831,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 # ==============================================================================
 elif st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
-    st.markdown("Vehículos Pendientes en Finca")
+    st.markdown("Vehículos en Finca / Tránsito")
     
     df_of, _ = get_df_safe("Orden_Fincas")
     finca_actual = str(st.session_state.finca_asignada)
@@ -843,7 +843,7 @@ elif st.session_state.rol == "VIGILANCIA":
         df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
         
     df_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', ''])] if not df_finca.empty else df_finca
-    st.metric("Pendientes", len(df_pendientes))
+    st.metric("Pendientes de Entrada", len(df_pendientes))
     st.dataframe(df_pendientes, use_container_width=True)
     
     st.markdown("---")
@@ -961,7 +961,6 @@ elif st.session_state.rol == "VIGILANCIA":
         )
 
         st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Panel de Validación Tecnológica:</p>", unsafe_allow_html=True)
-        
         val_coincide_ent = st.toggle("🟢 **¿Coincide la Placa / Guía Física?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_coincide_ent")
         estado_verificacion = "SI" if val_coincide_ent else "NO"
 
@@ -977,7 +976,6 @@ elif st.session_state.rol == "VIGILANCIA":
         if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_rol"):
             try:
                 _, sh, _ = get_db()
-                
                 nombres_hojas = [w.title for w in sh.worksheets()]
                 if "Bitacora_Vigilancia" in nombres_hojas:
                     ws_v = sh.worksheet("Bitacora_Vigilancia")
@@ -992,7 +990,6 @@ elif st.session_state.rol == "VIGILANCIA":
                     ])
 
                 id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                
                 dict_reg = {
                     "id_bitacora": id_reg,
                     "id_orden": str(oc_sel),
@@ -1017,7 +1014,8 @@ elif st.session_state.rol == "VIGILANCIA":
                     headers_of = [str(h).strip() for h in ws_of.row_values(1)]
                     if "estado_carga" in headers_of:
                         ws_of.update_cell(cell_of.row, headers_of.index("estado_carga") + 1, "LLEGADO_CASETA")
-                        
+                
+                st.cache_data.clear()
                 st.success(f"✅ ¡Entrada guardada con éxito a las {hora_dispositivo}!")
                 time.sleep(1.5)
                 st.rerun()
@@ -1026,7 +1024,9 @@ elif st.session_state.rol == "VIGILANCIA":
 
     with tab_sal:
         st.markdown("<h3 style='color: #d9534f;'>SALIDA DE FINCA</h3>", unsafe_allow_html=True)
-        df_salidas = df_finca[df_finca['estado_carga'].astype(str).str.upper() == 'LLEGADO_CASETA'] if not df_finca.empty else df_finca
+        
+        # Filtro corregido para buscar unidades que ya llegaron a caseta y están listas para salir
+        df_salidas = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['LLEGADO_CASETA', 'EN_SITIO', 'EN FINCA'])] if not df_finca.empty else df_finca
         lista_salidas = df_salidas['id_orden'].astype(str).tolist() if not df_salidas.empty else ["Sin unidades en sitio"]
         
         oc_sal_sel = st.selectbox("OC en Sitio:", lista_salidas, key="vis_oc_sal_sel_rol")
@@ -1069,7 +1069,6 @@ elif st.session_state.rol == "VIGILANCIA":
         if st.button("🚀 GUARDAR SALIDA", type="primary", use_container_width=True, key="btn_guardar_salida_rol"):
             try:
                 _, sh, _ = get_db()
-                
                 nombres_hojas = [w.title for w in sh.worksheets()]
                 if "Bitacora_Vigilancia" in nombres_hojas:
                     ws_v = sh.worksheet("Bitacora_Vigilancia")
@@ -1084,7 +1083,6 @@ elif st.session_state.rol == "VIGILANCIA":
                     ])
 
                 id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                
                 dict_reg_s = {
                     "id_bitacora": id_reg_s,
                     "id_orden": str(oc_sal_sel),
@@ -1109,7 +1107,8 @@ elif st.session_state.rol == "VIGILANCIA":
                     headers_of = [str(h).strip() for h in ws_of.row_values(1)]
                     if "estado_carga" in headers_of:
                         ws_of.update_cell(cell_of.row, headers_of.index("estado_carga") + 1, "COMPLETADO_SALIDA")
-                        
+                
+                st.cache_data.clear()
                 st.success(f"✅ ¡Salida registrada con éxito a las {hora_dispositivo}!")
                 time.sleep(1.5)
                 st.rerun()
