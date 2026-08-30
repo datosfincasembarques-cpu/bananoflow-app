@@ -118,36 +118,28 @@ class BananoDB:
                 })
         return id_compra
 
-    def crear_orden_carga(self, empresa, operador_id, tractor_id, caja1_id, caja2_id, finca_titular, fincas_ids, cliente_id, destino_id):
-        folio = f"OC-{datetime.datetime.now().strftime('%Y%m%d')}-{operador_id}"
-        id_orden = folio
-        data = {
-            "id_orden": id_orden,
-            "folio_orden": folio,
-            "fecha_creacion": datetime.datetime.now().isoformat(),
-            "id_usuario_crea": "OFICINA_CENTRAL",
-            "empresa": empresa,
-            "id_operador": operador_id,
-            "id_tractor": tractor_id,
-            "id_caja1": caja1_id,
-            "id_caja2": caja2_id if caja2_id else "",
-            "finca_titular": finca_titular,
-            "id_cliente": cliente_id,
-            "id_destino": destino_id,
-            "id_lote": f"LOTE-{id_orden}",
-            "estado": "ABIERTA",
-            "ruta_fincas_ids": ",".join(fincas_ids)
-        }
-        self.append_row_dict("OrdenesCarga", data)
+    def crear_orden_carga(self, datos_orden):
+        folio = f"OC-{datetime.datetime.now().strftime('%Y%m%d')}-{datos_orden.get('operador', 'GEN')[:3].upper()}"
+        datos_orden["id_orden"] = folio
+        datos_orden["folio_orden"] = folio
+        datos_orden["fecha_creacion"] = datetime.datetime.now().isoformat()
+        datos_orden["id_usuario_crea"] = "OFICINA_CENTRAL"
+        datos_orden["estado"] = "ABIERTA"
+        
+        fincas_ids = datos_orden.pop("fincas_ids_lista", [])
+        datos_orden["ruta_fincas_ids"] = ",".join(fincas_ids)
+
+        self.append_row_dict("OrdenesCarga", datos_orden)
+        
         for idx, finca_id in enumerate(fincas_ids):
             self.append_row_dict("Orden_Fincas", {
-                "id": f"{id_orden}-{finca_id}",
-                "id_orden": id_orden,
+                "id": f"{folio}-{finca_id}",
+                "id_orden": folio,
                 "id_finca": finca_id,
                 "orden_visita": idx+1,
                 "estado_carga": "PENDIENTE"
             })
-        return id_orden
+        return folio
 
 
 # =========================================================================
@@ -176,40 +168,116 @@ def render_oficina_central_catalogos(db):
             c1, c2 = st.columns(2)
             
             with c1:
-                op = st.selectbox("Operador", df_op['id_operador'].tolist() if not df_op.empty and 'id_operador' in df_op.columns else [])
-                tr = st.selectbox("Tractocamión", df_trac['id_tractor'].tolist() if not df_trac.empty and 'id_tractor' in df_trac.columns else [])
-                c_list = df_caja['id_caja'].tolist() if not df_caja.empty and 'id_caja' in df_caja.columns else []
-                c1_id = st.selectbox("Caja 1", c_list)
+                # OPERADOR: Mostrar nombre limpio y guardar el nombre
+                if not df_op.empty:
+                    op_cols = df_op.columns.tolist()
+                    # Buscamos la columna de nombre o usamos la segunda columna
+                    col_nom_op = next((c for c in op_cols if 'nombre' in c.lower() or 'operador' in c.lower()), op_cols[1] if len(op_cols) > 1 else op_cols[0])
+                    operadores_lista = df_op[col_nom_op].dropna().astype(str).tolist()
+                else:
+                    operadores_lista = []
+                operador_elegido = st.selectbox("Operador", operadores_lista if operadores_lista else ["Sin operadores"])
+
+                # TRACTOCAMIÓN: Mostrar Marca y Modelo juntos para elegir, pero listos para extraer
+                if not df_trac.empty:
+                    tr_cols = df_trac.columns.tolist()
+                    col_id_tr = tr_cols[0]
+                    col_marca = next((c for c in tr_cols if 'marca' in c.lower()), tr_cols[1] if len(tr_cols) > 1 else col_id_tr)
+                    col_modelo = next((c for c in tr_cols if 'modelo' in c.lower() or 'año' in c.lower()), col_marca)
+                    
+                    tractores_dict = {f"{row[col_marca]} - Modelo: {row[col_modelo]} ({row[col_id_tr]})": row.to_dict() for _, row in df_trac.iterrows()}
+                    tractor_opciones = list(tractores_dict.keys())
+                else:
+                    tractores_dict = {}
+                    tractor_opciones = []
+                
+                tractor_elegido_str = st.selectbox("Tractocamión (Marca / Modelo)", tractor_opciones if tractor_opciones else ["Sin tractores"])
+
+                # CAJA 1: Mostrar ID y descripción limpia
+                if not df_caja.empty:
+                    cj_cols = df_caja.columns.tolist()
+                    col_id_cj = cj_cols[0]
+                    col_desc_cj = next((c for c in cj_cols if 'tipo' in c.lower() or 'caja' in c.lower() or 'descripcion' in c.lower()), cj_cols[1] if len(cj_cols) > 1 else col_id_cj)
+                    
+                    cajas_dict = {f"Caja {row[col_id_cj]} - {row[col_desc_cj]}": str(row[col_id_cj]) for _, row in df_caja.iterrows()}
+                    cajas_opciones = list(cajas_dict.keys())
+                else:
+                    cajas_dict = {}
+                    cajas_opciones = []
+
+                caja1_elegida_str = st.selectbox("Caja 1", cajas_opciones if cajas_opciones else ["Sin cajas"])
                 full = st.checkbox("¿Full (2 Cajas)?")
-                c2_id = st.selectbox("Caja 2", [""] + c_list) if full else ""
+                caja2_elegida_str = st.selectbox("Caja 2", [""] + cajas_opciones) if full else ""
             
             with c2:
+                # FINCA TITULAR Y RUTA: Mostrar Nombre de la Finca limpio
                 if not df_finca.empty and 'empresa' in df_finca.columns:
-                    fincas_filtradas = df_finca[df_finca['empresa'] == empresa_seleccionada]['id_finca'].tolist()
-                    if not fincas_filtradas:
-                        fincas_filtradas = df_finca['id_finca'].tolist()
+                    df_fincas_filtradas = df_finca[df_finca['empresa'] == empresa_seleccionada]
+                    if df_fincas_filtradas.empty:
+                        df_fincas_filtradas = df_finca
                 else:
-                    fincas_filtradas = df_finca['id_finca'].tolist() if not df_finca.empty and 'id_finca' in df_finca.columns else []
+                    df_fincas_filtradas = df_finca
 
-                finca_titular = st.selectbox("Finca Titular (PROPIA de la Empresa)", fincas_filtradas)
-                f_ruta = st.multiselect("Ruta de Fincas (Propias y Terceros)", fincas_filtradas)
-                cli = st.selectbox("Cliente", df_cli['id_cliente'].tolist() if not df_cli.empty and 'id_cliente' in df_cli.columns else [])
-                dest = st.selectbox("Destino", df_dest['id_destino'].tolist() if not df_dest.empty and 'id_destino' in df_dest.columns else [])
+                if not df_fincas_filtradas.empty:
+                    f_cols = df_fincas_filtradas.columns.tolist()
+                    col_id_f = "id_finca" if "id_finca" in f_cols else f_cols[0]
+                    col_nom_f = "nombre" if "nombre" in f_cols else (f_cols[1] if len(f_cols) > 1 else col_id_f)
+                    
+                    fincas_dict = {f"{row[col_nom_f]} (ID: {row[col_id_f]})": str(row[col_id_f]) for _, row in df_fincas_filtradas.iterrows()}
+                    fincas_opciones = list(fincas_dict.keys())
+                else:
+                    fincas_dict = {}
+                    fincas_opciones = []
+
+                finca_titular_str = st.selectbox("Finca Titular (PROPIA de la Empresa)", fincas_opciones if fincas_opciones else ["Sin fincas"])
+                f_ruta_str = st.multiselect("Ruta de Fincas (Propias y Terceros)", fincas_opciones)
+
+                # CLIENTE: Mostrar nombre limpio
+                if not df_cli.empty:
+                    cli_cols = df_cli.columns.tolist()
+                    col_nom_cli = next((c for c in cli_cols if 'nombre' in c.lower() or 'razon' in c.lower() or 'cliente' in c.lower()), cli_cols[1] if len(cli_cols) > 1 else cli_cols[0])
+                    clientes_lista = df_cli[col_nom_cli].dropna().astype(str).tolist()
+                else:
+                    clientes_lista = []
+                cliente_elegido = st.selectbox("Cliente", clientes_lista if clientes_lista else ["Sin clientes"])
+
+                # DESTINO: Mostrar destino limpio
+                if not df_dest.empty:
+                    dest_cols = df_dest.columns.tolist()
+                    col_nom_dest = next((c for c in dest_cols if 'destino' in dest_cols or 'nombre' in c.lower() or 'lugar' in c.lower()), dest_cols[1] if len(dest_cols) > 1 else dest_cols[0])
+                    destinos_lista = df_dest[col_nom_dest].dropna().astype(str).tolist()
+                else:
+                    destinos_lista = []
+                destino_elegido = st.selectbox("Destino", destinos_lista if destinos_lista else ["Sin destinos"])
             
             st.markdown("---")
             if st.form_submit_button("💾 Generar Orden"):
-                if f_ruta:
-                    folio = db.crear_orden_carga(
-                        empresa=empresa_seleccionada,
-                        operador_id=op,
-                        tractor_id=tr,
-                        caja1_id=c1_id,
-                        caja2_id=c2_id,
-                        finca_titular=finca_titular,
-                        fincas_ids=f_ruta,
-                        cliente_id=cli,
-                        destino_id=dest
-                    )
+                if f_ruta_str:
+                    # Extraer datos desglosados limpios para los documentos e informes
+                    t_info = tractores_dict.get(tractor_elegido_str, {})
+                    marca_tractor = t_info.get(col_marca, "")
+                    modelo_tractor = t_info.get(col_modelo, "")
+                    
+                    c1_id = cajas_dict.get(caja1_elegida_str, "")
+                    c2_id = cajas_dict.get(caja2_elegida_str, "") if caja2_elegida_str else ""
+                    
+                    finca_titular_id = fincas_dict.get(finca_titular_str, "")
+                    fincas_ids_puros = [fincas_dict[f] for f in f_ruta_str if f in fincas_dict]
+
+                    datos_para_guardar = {
+                        "empresa": empresa_seleccionada,
+                        "operador": operador_elegido,            # <--- Solo el Nombre del Operador limpio
+                        "tractor_marca": marca_tractor,          # <--- Marca independiente
+                        "tractor_modelo": modelo_tractor,        # <--- Modelo independiente
+                        "id_caja1": c1_id,
+                        "id_caja2": c2_id,
+                        "finca_titular": finca_titular_id,
+                        "cliente": cliente_elegido,              # <--- Cliente limpio
+                        "destino": destino_elegido,              # <--- Destino limpio
+                        "fincas_ids_lista": fincas_ids_puros
+                    }
+
+                    folio = db.crear_orden_carga(datos_para_guardar)
                     st.success(f"¡Orden generada con éxito para **{empresa_seleccionada}**! Folio: **{folio}**")
                 else:
                     st.error("⚠️ Debe seleccionar al menos una finca para la ruta de carga.")
@@ -219,7 +287,6 @@ def render_oficina_central_catalogos(db):
         cat = st.selectbox("Catálogo", ["Empresas", "Fincas", "Operadores", "Tractores", "Cajas", "Clientes", "Destinos", "LineasTransporte"])
         
         df_cat_actual = db.get_df(cat)
-        
         accion = st.radio("Acción", ["➕ Nuevo Registro", "✏️ Editar Existente"], horizontal=True)
         
         reg_a_editar = None
@@ -242,54 +309,25 @@ def render_oficina_central_catalogos(db):
 
         with st.form("f_cat"):
             if cat == "Empresas":
-                def_id_emp = str(reg_a_editar.get("ID_EMPRESA", "")) if reg_a_editar else ""
-                def_nom = str(reg_a_editar.get("NOMBRE_RAZON SOCIAL", "")) if reg_a_editar else ""
-                def_rfc = str(reg_a_editar.get("RFC", "")) if reg_a_editar else ""
-                def_cont = str(reg_a_editar.get("CONTACTO", "")) if reg_a_editar else ""
-
-                id_empresa = st.text_input("ID Empresa", value=def_id_emp)
-                nombre_razon = st.text_input("Nombre / Razón Social", value=def_nom)
-                rfc = st.text_input("RFC", value=def_rfc)
-                contacto = st.text_input("Contacto", value=def_cont)
-
                 d = {
-                    "ID_EMPRESA": id_empresa,
-                    "NOMBRE_RAZON SOCIAL": nombre_razon,
-                    "RFC": rfc,
-                    "CONTACTO": contacto
+                    "ID_EMPRESA": st.text_input("ID Empresa", value=str(reg_a_editar.get("ID_EMPRESA", "")) if reg_a_editar else ""),
+                    "NOMBRE_RAZON SOCIAL": st.text_input("Nombre / Razón Social", value=str(reg_a_editar.get("NOMBRE_RAZON SOCIAL", "")) if reg_a_editar else ""),
+                    "RFC": st.text_input("RFC", value=str(reg_a_editar.get("RFC", "")) if reg_a_editar else ""),
+                    "CONTACTO": st.text_input("Contacto", value=str(reg_a_editar.get("CONTACTO", "")) if reg_a_editar else "")
                 }
-
             elif cat == "Fincas":
                 df_empresas_cat = db.get_df("Empresas")
                 lista_emps = df_empresas_cat['NOMBRE_RAZON SOCIAL'].tolist() if not df_empresas_cat.empty and 'NOMBRE_RAZON SOCIAL' in df_empresas_cat.columns else ["General"]
                 
-                def_id = str(reg_a_editar.get("id_finca", "")) if reg_a_editar else ""
-                def_nom = str(reg_a_editar.get("nombre", "")) if reg_a_editar else ""
-                def_tipo = str(reg_a_editar.get("tipo", "PROPIA")) if reg_a_editar else "PROPIA"
-                def_emp = str(reg_a_editar.get("empresa", lista_emps[0])) if reg_a_editar else lista_emps[0]
-                def_dir = str(reg_a_editar.get("direccion", "")) if reg_a_editar else ""
-                def_cam = True if reg_a_editar and str(reg_a_editar.get("tiene_camara_frio", "")).upper() in ["TRUE", "1", "SI"] else False
-                def_enc = str(reg_a_editar.get("encargado", "")) if reg_a_editar else ""
-                def_act = True if reg_a_editar and str(reg_a_editar.get("activa", "")).upper() in ["TRUE", "1", "SI", ""] else True
-
-                id_finca = st.text_input("ID Finca", value=def_id)
-                nombre = st.text_input("Nombre de la Finca", value=def_nom)
-                tipo = st.selectbox("Tipo", ["PROPIA", "TERCERO"], index=0 if def_tipo=="PROPIA" else 1)
-                empresa = st.selectbox("Empresa a la que Pertenece", lista_emps, index=lista_emps.index(def_emp) if def_emp in lista_emps else 0)
-                direccion = st.text_input("Dirección", value=def_dir)
-                tiene_camara_frio = st.checkbox("¿Tiene Cámara de Frío?", value=def_cam)
-                encargado = st.text_input("Encargado", value=def_enc)
-                activa = st.checkbox("Activa", value=def_act)
-
                 d = {
-                    "id_finca": id_finca,
-                    "nombre": nombre,
-                    "tipo": tipo,
-                    "empresa": empresa,
-                    "direccion": direccion,
-                    "tiene_camara_frio": str(tiene_camara_frio),
-                    "encargado": encargado,
-                    "activa": str(activa)
+                    "id_finca": st.text_input("ID Finca", value=str(reg_a_editar.get("id_finca", "")) if reg_a_editar else ""),
+                    "nombre": st.text_input("Nombre de la Finca", value=str(reg_a_editar.get("nombre", "")) if reg_a_editar else ""),
+                    "tipo": st.selectbox("Tipo", ["PROPIA", "TERCERO"], index=0 if str(reg_a_editar.get("tipo", ""))=="PROPIA" else 1),
+                    "empresa": st.selectbox("Empresa", lista_emps),
+                    "direccion": st.text_input("Dirección", value=str(reg_a_editar.get("direccion", "")) if reg_a_editar else ""),
+                    "tiene_camara_frio": str(st.checkbox("¿Tiene Cámara de Frío?", value=True if reg_a_editar and str(reg_a_editar.get("tiene_camara_frio","")).upper() in ["TRUE","1","SI"] else False)),
+                    "encargado": st.text_input("Encargado", value=str(reg_a_editar.get("encargado", "")) if reg_a_editar else ""),
+                    "activa": "True"
                 }
             else:
                 d = {col: st.text_input(col, value=str(reg_a_editar.get(col, "")) if reg_a_editar else "") for col in df_cat_actual.columns}
