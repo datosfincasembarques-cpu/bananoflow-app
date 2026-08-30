@@ -850,12 +850,7 @@ elif st.session_state.rol == "VIGILANCIA":
     # Pestañas de Caseta para Entrada y Salida
     tab_ent, tab_sal = st.tabs(["📥 REGISTRAR ENTRADA", "📤 REGISTRAR SALIDA"])
     
-    import pytz
-    try:
-        zona_local = pytz.timezone('America/Mexico_City')
-        hora_dispositivo = datetime.now(zona_local).strftime("%Y-%m-%d %H:%M:%S")
-    except:
-        hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with tab_ent:
         st.markdown("<h3 style='color: #28a745;'>ENTRADA FINCA</h3>", unsafe_allow_html=True)
