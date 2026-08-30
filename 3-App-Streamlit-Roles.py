@@ -90,7 +90,7 @@ class BananoDB:
                 })
         return id_compra
 
-    def crear_orden_carga(self, operador_id, tractor_id, caja1_id, caja2_id, fincas_ids, cliente_id, destino_id):
+    def crear_orden_carga(self, empresa, operador_id, tractor_id, caja1_id, caja2_id, finca_titular, fincas_ids, cliente_id, destino_id):
         folio = f"OC-{datetime.datetime.now().strftime('%Y%m%d')}-{operador_id}"
         id_orden = folio
         data = {
@@ -98,10 +98,12 @@ class BananoDB:
             "folio_orden": folio,
             "fecha_creacion": datetime.datetime.now().isoformat(),
             "id_usuario_crea": "OFICINA_CENTRAL",
+            "empresa": empresa,
             "id_operador": operador_id,
             "id_tractor": tractor_id,
             "id_caja1": caja1_id,
             "id_caja2": caja2_id if caja2_id else "",
+            "finca_titular": finca_titular,
             "id_cliente": cliente_id,
             "id_destino": destino_id,
             "id_lote": f"LOTE-{id_orden}",
@@ -128,7 +130,8 @@ def render_oficina_central_catalogos(db):
     t1, t2, t3, t4 = st.tabs(["🚀 Crear Orden", "🗂️ Catálogos", "📑 Guías AAPS", "📦 Bodega"])
 
     with t1:
-        st.subheader("Nueva Orden de Carga")
+        st.subheader("Nueva Orden de Carga (Integrada por Empresa)")
+        
         df_op = db.get_df("Operadores")
         df_trac = db.get_df("Tractores")
         df_caja = db.get_df("Cajas")
@@ -137,7 +140,15 @@ def render_oficina_central_catalogos(db):
         df_dest = db.get_df("Destinos")
         
         with st.form("f_oc"):
+            # REQUERIMIENTO PRINCIPAL: Seleccionar primero la empresa
+            empresa_seleccionada = st.selectbox(
+                "🏢 Empresa", 
+                ["Empresa Productora A", "Empresa Comercializadora B", "Exportadora Bananera C"]
+            )
+            
+            st.markdown("---")
             c1, c2 = st.columns(2)
+            
             with c1:
                 op = st.selectbox("Operador", df_op['id_operador'].tolist() if not df_op.empty and 'id_operador' in df_op.columns else [])
                 tr = st.selectbox("Tractocamión", df_trac['id_tractor'].tolist() if not df_trac.empty and 'id_tractor' in df_trac.columns else [])
@@ -145,19 +156,31 @@ def render_oficina_central_catalogos(db):
                 c1_id = st.selectbox("Caja 1", c_list)
                 full = st.checkbox("¿Full (2 Cajas)?")
                 c2_id = st.selectbox("Caja 2", [""] + c_list) if full else ""
+            
             with c2:
                 f_list = df_finca['id_finca'].tolist() if not df_finca.empty and 'id_finca' in df_finca.columns else []
-                st.selectbox("Finca Titular", f_list)
-                f_ruta = st.multiselect("Ruta de Fincas", f_list)
+                finca_titular = st.selectbox("Finca Titular Guía (PROPIA)", f_list)
+                f_ruta = st.multiselect("Ruta de Fincas (Propias y Terceros)", f_list)
                 cli = st.selectbox("Cliente", df_cli['id_cliente'].tolist() if not df_cli.empty and 'id_cliente' in df_cli.columns else [])
                 dest = st.selectbox("Destino", df_dest['id_destino'].tolist() if not df_dest.empty and 'id_destino' in df_dest.columns else [])
             
+            st.markdown("---")
             if st.form_submit_button("💾 Generar Orden"):
                 if f_ruta:
-                    folio = db.crear_orden_carga(op, tr, c1_id, c2_id, f_ruta, cli, dest)
-                    st.success(f"Orden creada con éxito: {folio}")
+                    folio = db.crear_orden_carga(
+                        empresa=empresa_seleccionada,
+                        operador_id=op,
+                        tractor_id=tr,
+                        caja1_id=c1_id,
+                        caja2_id=c2_id,
+                        finca_titular=finca_titular,
+                        fincas_ids=f_ruta,
+                        cliente_id=cli,
+                        destino_id=dest
+                    )
+                    st.success(f"¡Orden generada con éxito para **{empresa_seleccionada}**! Folio: **{folio}**")
                 else:
-                    st.error("Seleccione al menos una finca en ruta.")
+                    st.error("⚠️ Debe seleccionar al menos una finca para la ruta de carga.")
 
     with t2:
         st.subheader("Catálogos Maestros")
