@@ -318,7 +318,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         df_fincas_propias = df_fincas_emp[df_fincas_emp['tipo'].astype(str).str.upper() == 'PROPIA'] if not df_fincas_emp.empty and 'tipo' in df_fincas_emp.columns else df_fincas_emp
         fin_prop_nombres, fin_prop_mapa = lista_simple_no_concat(df_fincas_propias, "id_finca", "nombre")
         fin_todos_nombres, fin_todos_mapa = lista_simple_no_concat(df_fin, "id_finca", "nombre")
-        lin_nombres, lin_mapa = lista_simple_no_concat(df_lin, "id_linea", "razon_social")
         ops_nombres, ops_mapa = lista_simple_no_concat(df_op, "id_operador", "nombre")
 
         col_f1, col_f2 = st.columns(2)
@@ -335,24 +334,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             for fn in fin_ruta_sel:
                 d = fin_todos_mapa.get(fn, {})
                 ids_fin_ruta.append(str(d.get('id_finca', '') or fn))
-
-        col_l1, col_l2 = st.columns([2, 1])
-        with col_l1:
-            lin_sel = st.selectbox("🚛 Línea de Transporte", lin_nombres if lin_nombres else ["LIN-01"], key="lin_hibrido")
-            lin_data = lin_mapa.get(lin_sel, {})
-            id_lin = str(lin_data.get('id_linea', '') or lin_sel)
-        with col_l2:
-            st.text_input("ID Línea", value=id_lin, disabled=True, key="id_lin_hibrido")
-
-        if not df_tr_u.empty and 'id_linea' in df_tr_u.columns:
-            df_tr_filt = df_tr_u[df_tr_u['id_linea'].astype(str).str.upper() == id_lin.upper()]
-            if df_tr_filt.empty: df_tr_filt = df_tr_u
-        else: df_tr_filt = df_tr_u
-        
-        if not df_cj_u.empty and 'id_linea' in df_cj_u.columns:
-            df_cj_filt = df_cj_u[df_cj_u['id_linea'].astype(str).str.upper() == id_lin.upper()]
-            if df_cj_filt.empty: df_cj_filt = df_cj_u
-        else: df_cj_filt = df_cj_u
 
         st.markdown("#### 👤 Operador Asignado")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
@@ -373,11 +354,12 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             tel_val = str(op_data.get('telefono', ''))
             st.text_input("Tel", value=tel_val, disabled=True, key="tel_hibrido", label_visibility="collapsed")
 
-        st.markdown(f"#### 🚛 Equipamiento Asignado - {lin_sel}")
-        tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_filt)
-        cj_placas, cj_mapa_placa = lista_placas_no_concat(df_cj_filt)
+        tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_u)
+        cj_placas, cj_mapa_placa = lista_placas_no_concat(df_cj_u)
         cli_nombres, cli_mapa = lista_simple_no_concat(df_cli, "id_cliente", "razon_social")
         des_nombres, des_mapa = lista_simple_no_concat(df_des, "id_destino", "ciudad")
+
+        st.markdown("#### 🚛 Equipamiento Asignado")
 
         col_sw1, col_sw2 = st.columns([3, 1])
         with col_sw1:
@@ -392,11 +374,18 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             tr_data = tr_mapa_placa.get(tr_placa_sel, {})
             id_tr = str(tr_data.get('id_tractor', '') or tr_placa_sel)
             placa_str = str(tr_data.get('placas', '') or tr_placa_sel)
-            linea_tractor_id = str(tr_data.get('id_linea', '') or id_lin)
             
+            id_lin = str(tr_data.get('id_linea', '')).strip()
+            lin_nombre_str = id_lin
+            if not df_lin.empty:
+                match_lin = df_lin[df_lin['id_linea'].astype(str).str.upper() == id_lin.upper()]
+                if not match_lin.empty:
+                    col_nom_lin = next((c for c in match_lin.columns if "razon" in c.lower() or "nombre" in c.lower()), match_lin.columns[1] if len(match_lin.columns) > 1 else match_lin.columns[0])
+                    lin_nombre_str = str(match_lin.iloc[0].get(col_nom_lin, id_lin))
+
             st.text_input("ID Tracto", value=id_tr, disabled=True, key="id_tr_hibrido")
             st.text_input("Placas", value=placa_str, disabled=True, key="placa_tr_hibrido")
-            st.text_input("Línea Asignada", value=linea_tractor_id, disabled=True, key="linea_tr_hibrido")
+            st.text_input("Línea de Transporte", value=lin_nombre_str, disabled=True, key="linea_tr_hibrido")
 
         with ct2:
             st.markdown("**Caja 1**")
