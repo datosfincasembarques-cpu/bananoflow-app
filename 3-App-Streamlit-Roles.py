@@ -22,12 +22,12 @@ def get_gspread_client():
     creds_dict = dict(st.secrets["google_credentials"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
-    return client
+    return client, creds
 
 def get_db():
-    client = get_gspread_client()
+    client, creds = get_gspread_client()
     sh = client.open(SPREADSHEET_NAME)
-    drive_service = build('drive', 'v3', credentials=client.auth)
+    drive_service = build('drive', 'v3', credentials=creds)
     return client, sh, drive_service
 
 def get_df_safe(sheet_name):
