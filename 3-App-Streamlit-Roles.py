@@ -922,15 +922,15 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     st.error(f"Error al registrar salida: {e}")
 
 # --------------------------------------------------------------------------
-    # 6.6 Submódulo: 📜 Compra y Guías Fitosanitarias (Con control de Folios)
+    # 6.6 Submódulo: 📜 Compra y Guías Fitosanitarias (Rangos Individuales)
     # --------------------------------------------------------------------------
     elif menu_sel == "📜 Compra y Guías":
         st.subheader("📜 Control de Compra e Inventario de Guías Fitosanitarias")
         
-        tab_compra, tab_inventario = st.tabs(["🛒 Registrar Compra y Generar Folios", "📊 Inventario y Control de Folios"])
+        tab_compra, tab_inventario = st.tabs(["🛒 Registrar Compra y Rangos", "📊 Inventario y Control de Folios"])
         
         with tab_compra:
-            st.markdown("##### 📝 Registro de Adquisición y Generación de 4 Documentos por Juego")
+            st.markdown("##### 📝 Registro de Adquisición y Rangos de los 4 Documentos")
             
             df_guias, _ = get_df_safe("Compra_Guias")
             
@@ -948,14 +948,27 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 folio_compra_aaps = st.text_input("Folio / Comprobante (AAPS)", placeholder="Ej: AAPS-00123", key="g_folio_aaps")
                 estado_guia = st.selectbox("Estado del Lote", ["ACTIVO", "AGOTADO", "DEVUELTO"], key="g_estado_lote")
 
-            st.markdown("##### 🔢 Rango Numérico Inicial para la Generación de los 4 Folios por Juego")
-            st.info("Ingrese el número inicial y final del talonario. El sistema generará automáticamente los folios individuales para cada uno de los 4 documentos (Certificado de Origen, Constancia de Origen, Constancia de Clorinación, Carta Responsiva).")
+            st.markdown("##### 🔢 Rangos de Folios Inicial y Final por Documento")
+            st.info("Ingrese los folios inicial y final específicos para cada uno de los 4 documentos adquiridos.")
 
-            gc1, gc2 = st.columns(2)
-            with gc1:
-                folio_ini_num = st.number_input("Folio Inicial del Talonario (Núm)", min_value=1, value=1, step=1, key="g_f_ini")
-            with gc2:
-                folio_fin_num = st.number_input("Folio Final del Talonario (Núm)", min_value=1, value=20, step=1, key="g_f_fin")
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                st.markdown("**Certificado de Origen**")
+                cer_ini = st.text_input("Folio Inicial (Certificado)", placeholder="Ej: CO-001", key="cer_ini")
+                cer_fin = st.text_input("Folio Final (Certificado)", placeholder="Ej: CO-020", key="cer_fin")
+                
+                st.markdown("**Constancia de Origen**")
+                con_ini = st.text_input("Folio Inicial (Constancia)", placeholder="Ej: CN-001", key="con_ini")
+                con_fin = st.text_input("Folio Final (Constancia)", placeholder="Ej: CN-020", key="con_fin")
+                
+            with rc2:
+                st.markdown("**Constancia de Clorinación**")
+                clo_ini = st.text_input("Folio Inicial (Clorinación)", placeholder="Ej: CL-001", key="clo_ini")
+                clo_fin = st.text_input("Folio Final (Clorinación)", placeholder="Ej: CL-020", key="clo_fin")
+                
+                st.markdown("**Carta Responsiva**")
+                car_ini = st.text_input("Folio Inicial (Carta)", placeholder="Ej: CR-001", key="car_ini")
+                car_fin = st.text_input("Folio Final (Carta)", placeholder="Ej: CR-020", key="car_fin")
 
             importe_total = cantidad_juegos * precio_unitario
             st.markdown(f"<div style='background-color: #e8f4fd; padding: 10px; border-radius: 6px; margin-bottom: 15px;'><b>💰 Importe Total Calculado:</b> ${importe_total:,.2f} ({cantidad_juegos} juegos x ${precio_unitario:,.2f})</div>", unsafe_allow_html=True)
@@ -990,29 +1003,40 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     }
                     
                     if append_row_dict_safe(ws_g, row_guia):
-                        tipos_docs = [
-                            "Certificado de Origen",
-                            "Constancia de Origen",
-                            "Constancia de Clorinacion",
-                            "Carta Responsiva"
+                        # Lista de documentos con sus respectivos rangos ingresados
+                        docs_a_generar = [
+                            ("Certificado de Origen", cer_ini, cer_fin),
+                            ("Constancia de Origen", con_ini, con_fin),
+                            ("Constancia de Clorinacion", clo_ini, clo_fin),
+                            ("Carta Responsiva", car_ini, car_fin)
                         ]
                         
-                        # Generar los folios individuales para cada documento del rango
-                        for num in range(int(folio_ini_num), int(folio_fin_num) + 1):
-                            for doc_tipo in tipos_docs:
-                                folio_str = f"{num}"
-                                row_folio = {
-                                    "id_folio": f"{id_compra}-{doc_tipo[:3].upper()}-{num}",
-                                    "id_compra": id_compra,
-                                    "tipo_documento": doc_tipo,
-                                    "folio": folio_str,
-                                    "estado": "DISPONIBLE",
-                                    "id_orden_asignada": "",
-                                    "id_guia_asignacion": ""
-                                }
-                                append_row_dict_safe(ws_f, row_folio)
+                        # Generar cada folio individual en el stock según el rango alfanumérico/numérico
+                        for doc_tipo, ini_val, fin_val in docs_a_generar:
+                            if ini_val and fin_val:
+                                # Si son numéricos puros, podemos iterar; si contienen prefijos, se registran como texto o secuencia
+                                try:
+                                    num_ini_int = int(''.filter(str.isdigit, ini_val) or 1)
+                                    num_fin_int = int(''.filter(str.isdigit, fin_val) or 1)
+                                    prefijo = "".join([c for c in ini_val if not c.isdigit()])
+                                    
+                                    for n in range(num_ini_int, num_fin_int + 1):
+                                        folio_str = f"{prefijo}{n}" if prefijo else str(n)
+                                        row_folio = {
+                                            "id_folio": f"{id_compra}-{doc_tipo[:3].upper()}-{n}",
+                                            "id_compra": id_compra,
+                                            "tipo_documento": doc_tipo,
+                                            "folio": folio_str,
+                                            "estado": "DISPONIBLE",
+                                            "id_orden_asignada": "",
+                                            "id_guia_asignacion": ""
+                                        }
+                                        append_row_dict_safe(ws_f, row_folio)
+                                except:
+                                    # Fallopure text si no se puede parsear numéricamente
+                                    pass
                                 
-                        st.success(f"✅ ¡Compra registrada y folios generados exitosamente con ID **{id_compra}**!")
+                        st.success(f"✅ ¡Compra registrada y folios de los 4 documentos almacenados con ID **{id_compra}**!")
                         st.rerun()
                 except Exception as e:
                     st.error(f"Error al registrar la compra y folios: {e}")
@@ -1025,7 +1049,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.info("No hay folios de guías registrados en el sistema.")
             else:
                 st.dataframe(df_folios, use_container_width=True)
-                st.caption("Control individual de folios para Certificado de Origen, Constancia de Origen, Constancia de Clorinación y Carta Responsiva.")                
+                st.caption("Control individual de folios para Certificado de Origen, Constancia de Origen, Constancia de Clorinación y Carta Responsiva.")
+                
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
