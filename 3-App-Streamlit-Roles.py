@@ -15,6 +15,12 @@ st.set_page_config(page_title="Control Operativo - Embarques V5", layout="wide",
 # ==============================================================================
 # 2. CONEXIÓN Y CARGA SEGURA DE DATOS (CON CACHÉ Y PROTECCIÓN CONTRA LÍMITE 429)
 # ==============================================================================
+import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+import time
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
 
@@ -73,7 +79,6 @@ def get_df_safe_cached(sheet_name):
 
 def get_df_safe(sheet_name, max_retries=3):
     return get_df_safe_cached(sheet_name)
-
 # ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
 # ==============================================================================
