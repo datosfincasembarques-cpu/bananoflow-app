@@ -1029,8 +1029,11 @@ elif st.session_state.rol == "VIGILANCIA":
                 _, sh, _ = get_db()
                 try:
                     ws_v = sh.worksheet("vigilancia_registro")
-                except:
-                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                except Exception:
+                    try:
+                        ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                    except Exception:
+                        ws_v = sh.worksheet("vigilancia_registro")
 
                 id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
@@ -1123,8 +1126,11 @@ elif st.session_state.rol == "VIGILANCIA":
                 _, sh, _ = get_db()
                 try:
                     ws_v = sh.worksheet("vigilancia_registro")
-                except:
-                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                except Exception:
+                    try:
+                        ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                    except Exception:
+                        ws_v = sh.worksheet("vigilancia_registro")
 
                 id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
