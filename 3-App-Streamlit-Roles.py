@@ -78,8 +78,7 @@ def get_df_safe_cached(sheet_name):
     return pd.DataFrame(dtype=str)
 
 def get_df_safe(sheet_name, max_retries=3):
-    return get_df_safe_cached(sheet_name)
-# ==============================================================================
+    return get_df_safe_cached(sheet_name)# ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
 # ==============================================================================
 ROLES = ["OFICINA_CENTRAL", "VIGILANCIA", "JEFE_PLANTA", "ESTIBA"]
