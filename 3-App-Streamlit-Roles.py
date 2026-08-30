@@ -898,6 +898,7 @@ elif st.session_state.rol == "VIGILANCIA":
         id_linea_raw = str(info_orden.get('id_linea', '')).strip()
         id_caja1_raw = str(info_orden.get('id_caja1', '')).strip()
 
+        # Traducir Operador a Nombre Completo
         nombre_operador = id_operador_raw or "No especificado"
         if not df_op_m.empty and id_operador_raw:
             for idx, row in df_op_m.iterrows():
@@ -908,6 +909,7 @@ elif st.session_state.rol == "VIGILANCIA":
                         nombre_operador = posibles_textos[0]
                         break
 
+        # Traducir Línea de Transporte
         nombre_linea = id_linea_raw or "No especificado"
         if not df_lin_m.empty and id_linea_raw:
             col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
@@ -916,6 +918,7 @@ elif st.session_state.rol == "VIGILANCIA":
             if not match_lin.empty:
                 nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
 
+        # Traducir Tractor / Unidad, Modelo y Placas
         desc_tractor = id_tractor_raw or "No especificado"
         placas_tractor = "No especificado"
         if not df_tr_unif.empty and id_tractor_raw:
@@ -923,11 +926,21 @@ elif st.session_state.rol == "VIGILANCIA":
             match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
             if not match_tr.empty:
                 r_tr = match_tr.iloc[0]
-                marca = str(r_tr.get('marca', r_tr.get('modelo', 'Unidad')))
+                marca = str(r_tr.get('marca', r_tr.get('modelo_tractor', 'Unidad')))
+                modelo = str(r_tr.get('modelo', r_tr.get('anio', r_tr.get('año', ''))))
                 eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
-                desc_tractor = f"{marca} (Eco: {eco})" if eco else marca
+                
+                # Construir descripción detallada incluyendo el modelo si existe
+                partes_tractor = [marca]
+                if modelo and modelo.lower() != 'nan':
+                    partes_tractor.append(f"mod {modelo}")
+                if eco and eco.lower() != 'nan':
+                    partes_tractor.append(f"(Eco: {eco})")
+                
+                desc_tractor = " ".join(partes_tractor)
                 placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
 
+        # Traducir Caja 1
         desc_caja1 = id_caja1_raw or "No especificado"
         if not df_cj_unif.empty and id_caja1_raw:
             col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
@@ -937,6 +950,7 @@ elif st.session_state.rol == "VIGILANCIA":
                 placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
                 desc_caja1 = f"Caja Placa: {placa_cj}" if placa_cj else id_caja1_raw
 
+        # Recuadro visual detallado para corroboración en caseta
         st.markdown(
             f"""
             <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #28a745; margin-bottom: 15px;'>
@@ -954,15 +968,24 @@ elif st.session_state.rol == "VIGILANCIA":
 
         st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 5px;'>¿Coincide la Placa / Guía Física en la Unidad?</p>", unsafe_allow_html=True)
         
+        estado_verificacion = st.session_state.get("placa_verificada_estado", "SI")
+
         cols_btn = st.columns(2)
         with cols_btn[0]:
-            if st.button("🟢 SÍ - COINCIDE", use_container_width=True, key="btn_placa_si_ent"):
+            tipo_btn_si = "primary" if estado_verificacion == "SI" else "secondary"
+            if st.button("🟢 SÍ - COINCIDE", use_container_width=True, type=tipo_btn_si, key="btn_placa_si_ent"):
                 st.session_state["placa_verificada_estado"] = "SI"
+                st.rerun()
         with cols_btn[1]:
-            if st.button("🔴 NO - DIFERENTE", use_container_width=True, key="btn_placa_no_ent"):
+            tipo_btn_no = "primary" if estado_verificacion == "NO" else "secondary"
+            if st.button("🔴 NO - DIFERENTE", use_container_width=True, type=tipo_btn_no, key="btn_placa_no_ent"):
                 st.session_state["placa_verificada_estado"] = "NO"
+                st.rerun()
 
-        estado_verificacion = st.session_state.get("placa_verificada_estado", "SI")
+        if estado_verificacion == "SI":
+            st.success("✅ Verificación aprobada: Las placas físicas coinciden con el registro.")
+        else:
+            st.warning("⚠️ Indicó que las placas no coinciden. El registro se guardará con la observación de discrepancia.")
         
         foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE", key="vis_foto_tractor_rol")
         foto_caja = st.camera_input("📷 FOTO 2 - CAJA TRASERA", key="vis_foto_caja_rol")
@@ -970,16 +993,17 @@ elif st.session_state.rol == "VIGILANCIA":
         if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_rol"):
             try:
                 _, sh, _ = get_db()
-                
-                # Obtención o creación segura de la hoja de registro con reintentos
-                ws_v = None
                 try:
                     ws_v = sh.worksheet("vigilancia_registro")
                 except Exception:
-                    try:
-                        ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
-                    except Exception:
-                        ws_v = sh.worksheet("vigilancia_registro")
+                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                
+                if not ws_v.get_all_values():
+                    ws_v.append_row([
+                        "id_registro", "id_orden", "id_finca", "id_caja", 
+                        "tipo_evento", "fecha_hora", "foto_tractor_placa_url", 
+                        "foto_caja_placa_url", "id_usuario_vigilante", "observaciones"
+                    ])
 
                 id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
@@ -993,7 +1017,7 @@ elif st.session_state.rol == "VIGILANCIA":
                     "foto_tractor_placa_url": "CARGADA" if foto_tractor is not None else "PENDIENTE",
                     "foto_caja_placa_url": "CARGADA" if foto_caja is not None else "PENDIENTE",
                     "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                    "observaciones": f"Verificación Placa Coincide ({estado_verificacion}) | Op: {nombre_operador}"
+                    "observaciones": f"Unidad: {desc_tractor} | Placa: {placas_tractor} | Verificación Coincide ({estado_verificacion}) | Op: {nombre_operador}"
                 }
                 
                 ensure_columns_exist(ws_v, list(dict_reg.keys()))
@@ -1041,15 +1065,26 @@ elif st.session_state.rol == "VIGILANCIA":
             unsafe_allow_html=True
         )
 
-        cols_btn_sal = st.columns(2)
-        with cols_btn_sal[0]:
-            if st.button("🟢 SÍ - COINCIDE", use_container_width=True, key="btn_placa_si_sal"):
-                st.session_state["placa_verificada_salida"] = "SI"
-        with cols_btn_sal[1]:
-            if st.button("🔴 NO - DIFERENTE", use_container_width=True, key="btn_placa_no_sal"):
-                st.session_state["placa_verificada_salida"] = "NO"
+        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 5px;'>¿Coincide la Placa / Guía Física de Salida?</p>", unsafe_allow_html=True)
 
         estado_verificacion_sal = st.session_state.get("placa_verificada_salida", "SI")
+
+        cols_btn_sal = st.columns(2)
+        with cols_btn_sal[0]:
+            tipo_btn_sal_si = "primary" if estado_verificacion_sal == "SI" else "secondary"
+            if st.button("🟢 SÍ - COINCIDE", use_container_width=True, type=tipo_btn_sal_si, key="btn_placa_si_sal"):
+                st.session_state["placa_verificada_salida"] = "SI"
+                st.rerun()
+        with cols_btn_sal[1]:
+            tipo_btn_sal_no = "primary" if estado_verificacion_sal == "NO" else "secondary"
+            if st.button("🔴 NO - DIFERENTE", use_container_width=True, type=tipo_btn_sal_no, key="btn_placa_no_sal"):
+                st.session_state["placa_verificada_salida"] = "NO"
+                st.rerun()
+
+        if estado_verificacion_sal == "SI":
+            st.success("✅ Verificación de salida aprobada.")
+        else:
+            st.warning("⚠️ Indicó que las placas de salida no coinciden. El registro se guardará con la observación de discrepancia.")
         
         foto_tr_sal = st.camera_input("📷 FOTO SALIDA - TRACTOR FRENTE", key="vis_foto_tr_sal_rol")
         foto_cj_sal = st.camera_input("📷 FOTO SALIDA - CAJA TRASERA", key="vis_foto_cj_sal_rol")
@@ -1057,15 +1092,17 @@ elif st.session_state.rol == "VIGILANCIA":
         if st.button("🚀 GUARDAR SALIDA", type="primary", use_container_width=True, key="btn_guardar_salida_rol"):
             try:
                 _, sh, _ = get_db()
-                
-                ws_v = None
                 try:
                     ws_v = sh.worksheet("vigilancia_registro")
                 except Exception:
-                    try:
-                        ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
-                    except Exception:
-                        ws_v = sh.worksheet("vigilancia_registro")
+                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                
+                if not ws_v.get_all_values():
+                    ws_v.append_row([
+                        "id_registro", "id_orden", "id_finca", "id_caja", 
+                        "tipo_evento", "fecha_hora", "foto_tractor_placa_url", 
+                        "foto_caja_placa_url", "id_usuario_vigilante", "observaciones"
+                    ])
 
                 id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
