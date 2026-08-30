@@ -78,8 +78,9 @@ def get_df_safe_cached(sheet_name):
     return pd.DataFrame(dtype=str)
 
 def get_df_safe(sheet_name, max_retries=3):
-    """Devuelve únicamente el DataFrame asegurando compatibilidad con el sistema de caché."""
-    return get_df_safe_cached(sheet_name)
+    """Devuelve una tupla (df, None) para mantener compatibilidad con asignaciones dobles."""
+    df = get_df_safe_cached(sheet_name)
+    return df, None
 
 # Inicialización segura de variables globales de estado de conexión
 try:
