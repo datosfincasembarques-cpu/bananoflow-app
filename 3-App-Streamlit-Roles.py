@@ -54,6 +54,34 @@ class BananoDB:
             print(f"Error al registrar en {sheet_name}: {e}")
             return False
 
+    def actualizar_registro(self, sheet_name, key_column, key_value, data_dict):
+        try:
+            ws = self.sh.worksheet(sheet_name)
+            cell = ws.find(str(key_value))
+            if cell:
+                row_idx = cell.row
+                headers = ws.row_values(1)
+                for col_name, val in data_dict.items():
+                    if col_name in headers:
+                        col_idx = headers.index(col_name) + 1
+                        ws.update_cell(row_idx, col_idx, str(val))
+                return True
+            else:
+                return self.append_row_dict(sheet_name, data_dict)
+        except Exception as e:
+            print(f"Error al actualizar en {sheet_name}: {e}")
+            return False
+
+    def subir_foto_drive(self, file_path, file_name):
+        try:
+            file_metadata = {'name': file_name, 'parents': [self.drive_folder_id]}
+            media = MediaFileUpload(file_path, resumable=True)
+            file = self.drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+            return file.get('webViewLink')
+        except Exception as e:
+            print(f"Error subiendo a Drive: {e}")
+            return ""
+
     def registrar_termografo_o_filtro(self, tipo_item, folio, marca, estado="DISPONIBLE"):
         sheet_name = "Thermografos" if tipo_item == "THERMOGRAFO" else "Filtros"
         id_item = f"{tipo_item[0]}-{folio}"
@@ -141,8 +169,8 @@ def render_oficina_central_catalogos(db):
         df_dest = db.get_df("Destinos")
         
         with st.form("f_oc"):
-            # 1. SELECCIÓN DE EMPRESA PRIMERO
-            empresas_lista = df_emp['nombre_empresa'].tolist() if not df_emp.empty and 'nombre_empresa' in df_emp.columns else ["Sin Empresas Registradas"]
+            # 1. SELECCIÓN DE EMPRESA PRIMERO (Usando NOMBRE_RAZON SOCIAL)
+            empresas_lista = df_emp['NOMBRE_RAZON SOCIAL'].tolist() if not df_emp.empty and 'NOMBRE_RAZON SOCIAL' in df_emp.columns else ["Sin Empresas Registradas"]
             empresa_seleccionada = st.selectbox("🏢 1. Seleccione la Empresa", empresas_lista)
             
             st.markdown("---")
@@ -157,11 +185,11 @@ def render_oficina_central_catalogos(db):
                 c2_id = st.selectbox("Caja 2", [""] + c_list) if full else ""
             
             with c2:
-                # Filtrar fincas que pertenecen a la empresa seleccionada si existe la columna empresa en el df de fincas
+                # Filtrar fincas asociadas a la empresa seleccionada
                 if not df_finca.empty and 'empresa' in df_finca.columns:
                     fincas_filtradas = df_finca[df_finca['empresa'] == empresa_seleccionada]['id_finca'].tolist()
                     if not fincas_filtradas:
-                        fincas_filtradas = df_finca['id_finca'].tolist() # Fallback si no hay coincidencia exacta
+                        fincas_filtradas = df_finca['id_finca'].tolist()
                 else:
                     fincas_filtradas = df_finca['id_finca'].tolist() if not df_finca.empty and 'id_finca' in df_finca.columns else []
 
@@ -192,42 +220,97 @@ def render_oficina_central_catalogos(db):
         st.subheader("Catálogos Maestros")
         cat = st.selectbox("Catálogo", ["Empresas", "Fincas", "Operadores", "Tractores", "Cajas", "Clientes", "Destinos", "LineasTransporte"])
         
+        df_cat_actual = db.get_df(cat)
+        
+        # Opciones de acción: Nuevo o Editar
+        accion = st.radio("Acción", ["➕ Nuevo Registro", "✏️ Editar Existente"], horizontal=True)
+        
+        reg_a_editar = None
+        k_col = ""
+        if accion == "✏️ Editar Existente" and not df_cat_actual.empty:
+            key_col_map = {
+                "Empresas": "ID_EMPRESA" if "ID_EMPRESA" in df_cat_actual.columns else df_cat_actual.columns[0],
+                "Fincas": "id_finca" if "id_finca" in df_cat_actual.columns else df_cat_actual.columns[0],
+                "Operadores": "id_operador" if "id_operador" in df_cat_actual.columns else df_cat_actual.columns[0],
+                "Tractores": "id_tractor" if "id_tractor" in df_cat_actual.columns else df_cat_actual.columns[0],
+                "Cajas": "id_caja" if "id_caja" in df_cat_actual.columns else df_cat_actual.columns[0],
+                "Clientes": "id_cliente" if "id_cliente" in df_cat_actual.columns else df_cat_actual.columns[0],
+                "Destinos": "id_destino" if "id_destino" in df_cat_actual.columns else df_cat_actual.columns[0],
+            }
+            k_col = key_col_map.get(cat, df_cat_actual.columns[0])
+            
+            sel_id = st.selectbox(f"Seleccione {cat} a Editar", df_cat_actual[k_col].tolist())
+            if sel_id:
+                reg_a_editar = df_cat_actual[df_cat_actual[k_col] == sel_id].iloc[0].to_dict()
+
         with st.form("f_cat"):
             if cat == "Empresas":
+                def_id = str(reg_a_editar.get("ID", "")) if reg_a_editar else ""
+                def_id_emp = str(reg_a_editar.get("ID_EMPRESA", "")) if reg_a_editar else ""
+                def_nom = str(reg_a_editar.get("NOMBRE_RAZON SOCIAL", "")) if reg_a_editar else ""
+                def_rfc = str(reg_a_editar.get("RFC", "")) if reg_a_editar else ""
+                def_cont = str(reg_a_editar.get("CONTACTO", "")) if reg_a_editar else ""
+
+                id_reg = st.text_input("ID (Consecutivo/Interno)", value=def_id)
+                id_empresa = st.text_input("ID Empresa", value=def_id_emp)
+                nombre_razon = st.text_input("Nombre / Razón Social", value=def_nom)
+                rfc = st.text_input("RFC", value=def_rfc)
+                contacto = st.text_input("Contacto", value=def_cont)
+
                 d = {
-                    "id_empresa": st.text_input("ID o Código Empresa"),
-                    "nombre_empresa": st.text_input("Razón Social / Nombre Comercial"),
-                    "rfc": st.text_input("RFC / Identificación Fiscal"),
-                    "contacto": st.text_input("Persona de Contacto y Teléfono")
+                    "ID": id_reg,
+                    "ID_EMPRESA": id_empresa,
+                    "NOMBRE_RAZON SOCIAL": nombre_razon,
+                    "RFC": rfc,
+                    "CONTACTO": contacto
                 }
+
             elif cat == "Fincas":
                 df_empresas_cat = db.get_df("Empresas")
-                lista_emps = df_empresas_cat['nombre_empresa'].tolist() if not df_empresas_cat.empty and 'nombre_empresa' in df_empresas_cat.columns else ["General"]
+                lista_emps = df_empresas_cat['NOMBRE_RAZON SOCIAL'].tolist() if not df_empresas_cat.empty and 'NOMBRE_RAZON SOCIAL' in df_empresas_cat.columns else ["General"]
                 
+                def_id = str(reg_a_editar.get("id_finca", "")) if reg_a_editar else ""
+                def_nom = str(reg_a_editar.get("nombre", "")) if reg_a_editar else ""
+                def_tipo = str(reg_a_editar.get("tipo", "PROPIA")) if reg_a_editar else "PROPIA"
+                def_emp = str(reg_a_editar.get("empresa", lista_emps[0])) if reg_a_editar else lista_emps[0]
+                def_dir = str(reg_a_editar.get("direccion", "")) if reg_a_editar else ""
+                def_cam = True if reg_a_editar and str(reg_a_editar.get("tiene_camara_frio", "")).upper() in ["TRUE", "1", "SI"] else False
+                def_enc = str(reg_a_editar.get("encargado", "")) if reg_a_editar else ""
+                def_act = True if reg_a_editar and str(reg_a_editar.get("activa", "")).upper() in ["TRUE", "1", "SI", ""] else True
+
+                id_finca = st.text_input("ID Finca", value=def_id)
+                nombre = st.text_input("Nombre de la Finca", value=def_nom)
+                tipo = st.selectbox("Tipo", ["PROPIA", "TERCERO"], index=0 if def_tipo=="PROPIA" else 1)
+                empresa = st.selectbox("Empresa a la que Pertenece", lista_emps, index=lista_emps.index(def_emp) if def_emp in lista_emps else 0)
+                direccion = st.text_input("Dirección", value=def_dir)
+                tiene_camara_frio = st.checkbox("¿Tiene Cámara de Frío?", value=def_cam)
+                encargado = st.text_input("Encargado", value=def_enc)
+                activa = st.checkbox("Activa", value=def_act)
+
                 d = {
-                    "id_finca": st.text_input("Nombre / Código de la Finca"),
-                    "empresa": st.selectbox("Empresa a la que Pertenece", lista_emps),
-                    "tipo": st.selectbox("Tipo", ["PROPIA", "TERCERO"]),
-                    "ubicacion": st.text_input("Ubicación / Zona")
+                    "id_finca": id_finca,
+                    "nombre": nombre,
+                    "tipo": tipo,
+                    "empresa": empresa,
+                    "direccion": direccion,
+                    "tiene_camara_frio": str(tiene_camara_frio),
+                    "encargado": encargado,
+                    "activa": str(activa)
                 }
-            elif cat == "Operadores":
-                d = {"id_operador": st.text_input("Nombre y Licencia"), "telefono": st.text_input("Teléfono"), "domicilio": st.text_input("Domicilio")}
-            elif cat == "Tractores":
-                d = {"id_tractor": st.text_input("Placas"), "modelo": st.text_input("Modelo"), "linea": st.text_input("Línea"), "num_economico": st.text_input("Económico")}
-            elif cat == "Cajas":
-                d = {"id_caja": st.text_input("Placas Caja"), "num_economico": st.text_input("Económico"), "linea": st.text_input("Línea")}
-            elif cat == "Clientes":
-                d = {"id_cliente": st.text_input("Razón Social"), "rfc": st.text_input("RFC"), "domicilio": st.text_input("Domicilio")}
-            elif cat == "Destinos":
-                d = {"id_destino": st.text_input("ID Destino")}
             else:
-                d = {"razon_social": st.text_input("Razón Social"), "rfc": st.text_input("RFC"), "telefono": st.text_input("Teléfono")}
-            
-            if st.form_submit_button("Guardar en Google Sheets"):
-                db.registrar_catalogo(cat, d)
-                st.success(f"¡Registro guardado exitosamente en {cat}!")
-                
-        st.dataframe(db.get_df(cat), use_container_width=True)
+                d = {col: st.text_input(col, value=str(reg_a_editar.get(col, "")) if reg_a_editar else "") for col in df_cat_actual.columns}
+
+            btn_text = "Actualizar Registro en Google Sheets" if accion == "✏️ Editar Existente" else "Guardar Nuevo en Google Sheets"
+            if st.form_submit_button(btn_text):
+                if accion == "✏️ Editar Existente":
+                    db.actualizar_registro(cat, k_col, sel_id, d)
+                    st.success(f"¡Registro actualizado correctamente en {cat}!")
+                else:
+                    db.registrar_catalogo(cat, d)
+                    st.success(f"¡Nuevo registro guardado con éxito en {cat}!")
+                st.rerun()
+
+        st.dataframe(df_cat_actual, use_container_width=True)
 
     with t3:
         st.subheader("Guías Fitosanitarias AAPS")
