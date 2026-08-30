@@ -223,7 +223,7 @@ with st.sidebar:
         
         if st.session_state.rol == "OFICINA_CENTRAL":
             st.markdown("### 📌 Navegación")
-            menu = st.radio("Menú Oficina", ["📦 Crear Orden","📦 Órdenes Expedidas","📜 Compra y Guías". "✏️ Remisión/Factura", "⚙️ Catálogos Maestros", "🗺️ Seguimiento"], key="radio_menu_oficina")
+            menu = st.radio("Menú Oficina", ["📦 Crear Orden", "📦 Órdenes Expedidas", "📜 Compra y Guías", "✏️ Remisión/Factura", "⚙️ Catálogos Maestros", "🗺️ Seguimiento"], key="radio_menu_oficina")
             st.session_state.menu_oficina = menu
 
 if st.session_state.rol is None:
