@@ -960,16 +960,16 @@ elif st.session_state.rol == "VIGILANCIA":
             unsafe_allow_html=True
         )
 
-        # Diseño Futurista: Interruptor / Toggle Deslizable para Validación
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚙️ Panel de Validación Biométrica / Física:</p>", unsafe_allow_html=True)
+        # Diseño Futurista con Énfasis Verde en Coincidencia
+        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Panel de Validación Tecnológica:</p>", unsafe_allow_html=True)
         
-        val_coincide_ent = st.toggle("🟢 **¿Coincide la Placa / Guía Física?** (Activo = SÍ / Inactivo = NO)", value=True, key="toggle_coincide_ent")
+        val_coincide_ent = st.toggle("🟢 **¿Coincide la Placa / Guía Física?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_coincide_ent")
         estado_verificacion = "SI" if val_coincide_ent else "NO"
 
         if estado_verificacion == "SI":
-            st.markdown("<div style='padding: 8px; background: rgba(40,167,69,0.1); border-left: 4px solid #28a745; border-radius: 4px; color: #155724; font-size: 13px; font-weight: 600;'>🟢 ESTADO: COINCIDENCIA CONFIRMADA (FLUJO SEGURO)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO FUTURISTA: COINCIDENCIA VERIFICADA (ÓPTIMO)</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<div style='padding: 8px; background: rgba(217,83,79,0.1); border-left: 4px solid #d9534f; border-radius: 4px; color: #721c24; font-size: 13px; font-weight: 600;'>🔴 ESTADO: DISCREPANCIA DETECTADA (REGISTRO CON ALERTA)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO FUTURISTA: ALERTA DE DISCREPANCIA EN UNIDAD</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE", key="vis_foto_tractor_rol")
@@ -979,7 +979,6 @@ elif st.session_state.rol == "VIGILANCIA":
             try:
                 _, sh, _ = get_db()
                 
-                # Creación segura controlando hojas existentes
                 nombres_hojas = [w.title for w in sh.worksheets()]
                 if "vigilancia_registro" in nombres_hojas:
                     ws_v = sh.worksheet("vigilancia_registro")
@@ -1053,14 +1052,14 @@ elif st.session_state.rol == "VIGILANCIA":
             unsafe_allow_html=True
         )
 
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚙️ Panel de Validación de Salida:</p>", unsafe_allow_html=True)
-        val_coincide_sal = st.toggle("🟢 **¿Coincide la Placa / Guía de Salida?** (Activo = SÍ / Inactivo = NO)", value=True, key="toggle_coincide_sal")
+        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Panel de Validación de Salida:</p>", unsafe_allow_html=True)
+        val_coincide_sal = st.toggle("🟢 **¿Coincide la Placa / Guía de Salida?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_coincide_sal")
         estado_verificacion_sal = "SI" if val_coincide_sal else "NO"
 
         if estado_verificacion_sal == "SI":
-            st.markdown("<div style='padding: 8px; background: rgba(40,167,69,0.1); border-left: 4px solid #28a745; border-radius: 4px; color: #155724; font-size: 13px; font-weight: 600;'>🟢 ESTADO: SALIDA AUTORIZADA (CONFORME)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO FUTURISTA: SALIDA AUTORIZADA (CONFORME)</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<div style='padding: 8px; background: rgba(217,83,79,0.1); border-left: 4px solid #d9534f; border-radius: 4px; color: #721c24; font-size: 13px; font-weight: 600;'>🔴 ESTADO: SALIDA CON OBSERVACIÓN DE DISCREPANCIA</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO FUTURISTA: SALIDA CON DISCREPANCIA</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         foto_tr_sal = st.camera_input("📷 FOTO SALIDA - TRACTOR FRENTE", key="vis_foto_tr_sal_rol")
