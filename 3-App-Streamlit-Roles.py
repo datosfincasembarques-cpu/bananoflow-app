@@ -78,7 +78,13 @@ def get_df_safe_cached(sheet_name):
     return pd.DataFrame(dtype=str)
 
 def get_df_safe(sheet_name, max_retries=3):
-    return get_df_safe_cached(sheet_name)# ==============================================================================
+    return get_df_safe_cached(sheet_name)
+
+# Asegurar disponibilidad global de la variable de sesión para el control de acceso
+if "conectado" not in st.session_state:
+    st.session_state.conectado = False
+conectado = st.session_state.conectado
+# ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
 # ==============================================================================
 ROLES = ["OFICINA_CENTRAL", "VIGILANCIA", "JEFE_PLANTA", "ESTIBA"]
