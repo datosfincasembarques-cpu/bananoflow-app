@@ -6,3 +6,4 @@ pandas
 openpyxl
 reportlab
 fpdf2
+oauth2client
