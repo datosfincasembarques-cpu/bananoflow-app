@@ -825,6 +825,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.info("ℹ️ No hay registros en la hoja Orden_Fincas.")
         except Exception as e:
             st.error(f"Error al cargar los datos de seguimiento: {e}")
+            
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
@@ -1008,10 +1009,8 @@ elif st.session_state.rol == "VIGILANCIA":
         
         if estado_verificacion == "SI":
             st.success("✅ Verificación aprobada: Las placas físicas coinciden con el registro.")
-            placa_guia = placas_tractor
         else:
             st.warning("⚠️ Indicó que las placas no coinciden. El registro se guardará con la observación de discrepancia.")
-            placa_guia = f"DIFERENTE (Sistema: {placas_tractor})"
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div style='border: 2px dashed #28a745; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
@@ -1028,7 +1027,11 @@ elif st.session_state.rol == "VIGILANCIA":
         if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_rol"):
             try:
                 _, sh, _ = get_db()
-                ws_v = sh.worksheet("vigilancia_registro")
+                try:
+                    ws_v = sh.worksheet("vigilancia_registro")
+                except:
+                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+
                 id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
                 dict_reg = {
@@ -1067,7 +1070,6 @@ elif st.session_state.rol == "VIGILANCIA":
         
         oc_sal_sel = st.selectbox("OC en Sitio:", lista_salidas, key="vis_oc_sal_sel_rol")
         
-        # Buscar placas/datos de la unidad en salida para mostrarlos en la verificación
         placas_salida_sistema = "No especificada"
         if oc_sal_sel != "Sin unidades en sitio" and not df_salidas.empty:
             match_sal = df_salidas[df_salidas['id_orden'].astype(str) == str(oc_sal_sel)]
@@ -1104,10 +1106,8 @@ elif st.session_state.rol == "VIGILANCIA":
         
         if estado_verificacion_sal == "SI":
             st.success("✅ Verificación de salida aprobada.")
-            placa_sal = placas_salida_sistema
         else:
             st.warning("⚠️ Indicó que las placas de salida no coinciden. El registro se guardará con la observación de discrepancia.")
-            placa_sal = f"DIFERENTE (Sistema: {placas_salida_sistema})"
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div style='border: 2px dashed #d9534f; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
@@ -1121,7 +1121,11 @@ elif st.session_state.rol == "VIGILANCIA":
         if st.button("🚀 GUARDAR SALIDA", type="primary", use_container_width=True, key="btn_guardar_salida_rol"):
             try:
                 _, sh, _ = get_db()
-                ws_v = sh.worksheet("vigilancia_registro")
+                try:
+                    ws_v = sh.worksheet("vigilancia_registro")
+                except:
+                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+
                 id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
                 dict_reg_s = {
