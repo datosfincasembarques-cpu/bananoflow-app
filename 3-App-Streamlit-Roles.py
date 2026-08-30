@@ -1,8 +1,3 @@
-
-"""
-3 - APP BANANO V5 - TITULO ARRIBA IZQ + EMPRESA PRIMER PLANO + PANEL IZQ + SIN CONCATENAR + REMISION/FACTURA
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -12,6 +7,9 @@ from googleapiclient.discovery import build
 
 st.set_page_config(page_title="Embarques V5 - Empresa Primer Plano", layout="wide", page_icon="🍌")
 
+# ==========================================
+# CONFIGURACIÓN DE CONEXIÓN A GOOGLE SHEETS
+# ==========================================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 FOTOS_FOLDER_ID = st.secrets["app_config"]["fotos_folder_id"] if "app_config" in st.secrets else "1AW6qmZddxQG12q4rHKQmro7Ai3RYXhAR"
 SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
@@ -75,25 +73,6 @@ def append_row_dict_safe(ws, data_dict):
         st.error(f"Error guardando: {e}")
         return False
 
-def subir_foto_a_drive(file_uploader, nombre_archivo):
-    try:
-        if file_uploader is None: return ""
-        import tempfile, os
-        from googleapiclient.http import MediaFileUpload
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(file_uploader.getbuffer())
-            tmp_path = tmp.name
-        file_metadata = {'name': nombre_archivo, 'parents': [FOTOS_FOLDER_ID] if FOTOS_FOLDER_ID else []}
-        media = MediaFileUpload(tmp_path, mimetype='image/jpeg')
-        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-        try: drive_service.permissions().create(fileId=file['id'], body={'type':'anyone','role':'reader'}).execute()
-        except: pass
-        os.unlink(tmp_path)
-        return file.get('webViewLink','')
-    except Exception as e:
-        st.error(f"Error foto: {e}")
-        return ""
-
 try:
     client, sh, drive_service = get_db()
     conectado=True
@@ -101,16 +80,23 @@ except Exception as e:
     conectado=False
     err_conexion=str(e)
 
+# ==========================================
+# GESTIÓN DE SESIÓN Y ROLES
+# ==========================================
 ROLES=["OFICINA_CENTRAL","VIGILANCIA","JEFE_PLANTA","ESTIBA"]
 if 'rol' not in st.session_state:
     for k in ["rol","id_finca","usuario","username","nombre_usuario","id_usuario","finca_asignada","menu_oficina"]:
         st.session_state[k]=None
 
+# ==========================================
+# BARRA LATERAL - CONTROL DE ACCESO
+# ==========================================
 with st.sidebar:
     st.markdown("### 🍌 Embarques")
     st.caption("Panel Opciones Izquierda")
     if conectado: st.success(f"Conectado: {SPREADSHEET_NAME}")
     else: st.error(err_conexion)
+    
     if st.session_state.rol is None:
         rol=st.selectbox("Rol", ROLES)
         df_usuarios_raw,_=get_df_safe("Usuarios")
@@ -129,16 +115,19 @@ with st.sidebar:
                 elif "password" in c or "pass" in c: rename[col]="password_hash"
                 elif "activo" in c: rename[col]="activo"
             df_usuarios=df_usuarios.rename(columns=rename)
+            
         df_activos=df_usuarios[df_usuarios["activo"].astype(str).str.upper().isin(["TRUE","SI","1","ACTIVO"])] if "activo" in df_usuarios.columns else df_usuarios
         if df_activos.empty: df_activos=df_usuarios
         df_filt=df_activos[df_activos["rol"].astype(str).str.upper()==rol.upper()] if not df_activos.empty else df_activos
         if df_filt.empty: df_filt=df_activos
+        
         opciones=[]; mapa={}
         for _,r in df_filt.iterrows():
             username=str(r.get("username","")).strip() or str(r.get("id_usuario","")).strip()
             if username and username not in opciones:
                 opciones.append(username); mapa[username]=r
         if not opciones: opciones=["Martin.oficina"]
+        
         usuario_sel=st.selectbox("Usuario", opciones)
         r_sel=mapa.get(usuario_sel)
         if r_sel is not None:
@@ -150,6 +139,7 @@ with st.sidebar:
             pass_bd=str(r_sel.get("password_hash","")).strip()
         else:
             id_usuario=""; username=usuario_sel; nombre_usuario=username; rol_real=rol; finca_asignada="TODAS"; pass_bd=""
+            
         st.caption(f"User:{username}")
         pwd=st.text_input("Contraseña", type="password")
         if st.button("Entrar"):
@@ -181,6 +171,9 @@ with st.sidebar:
 if st.session_state.rol is None:
     st.stop()
 
+# ==========================================
+# FUNCIONES AUXILIARES SIN CONCATENAR
+# ==========================================
 def lista_simple_no_concat(df, id_key, nombre_key):
     if df.empty: return [], {}
     col_id = next((c for c in df.columns if id_key.lower() in c.lower()), df.columns[0])
@@ -210,7 +203,9 @@ def lista_placas_no_concat(df):
         mapa[pla]=r.to_dict()
     return sorted(lista), mapa
 
-# ================= OFICINA CENTRAL V5 =================
+# ==========================================
+# MÓDULO OFICINA CENTRAL V5
+# ==========================================
 if st.session_state.rol=="OFICINA_CENTRAL":
     df_emp,_=get_df_safe("Empresas")
     df_fin,_=get_df_safe("Fincas")
@@ -224,25 +219,24 @@ if st.session_state.rol=="OFICINA_CENTRAL":
     df_des,_=get_df_safe("Destinos")
     df_oc,_=get_df_safe("OrdenesCarga")
     df_of,_=get_df_safe("Orden_Fincas")
+    
     df_tr_u = pd.concat([df_tr, df_tr2], ignore_index=True) if not df_tr.empty and not df_tr2.empty else (df_tr if not df_tr.empty else df_tr2)
     df_cj_u = pd.concat([df_cj, df_cj2], ignore_index=True) if not df_cj.empty and not df_cj2.empty else (df_cj if not df_cj.empty else df_cj2)
 
     emp_nombres, emp_mapa = lista_simple_no_concat(df_emp, "id_empresa", "razon_social")
 
-    # TITULO ARRIBA A LA IZQUIERDA
+    # TÍTULO ARRIBA A LA IZQUIERDA
     col_title, col_emp_top = st.columns([2,2])
     with col_title:
         st.markdown(f"<h2 style='margin:0; text-align:left;'>Oficina Central - {st.session_state.username}</h2>", unsafe_allow_html=True)
         st.caption(f"{st.session_state.nombre_usuario} | {st.session_state.finca_asignada}")
     with col_emp_top:
-        # EMPRESA EN PRIMER PLANO - ARRIBA IZQUIERDA
         st.markdown("**🏢 Empresa Expedidora (Primer Plano)**")
         emp_sel_principal = st.selectbox("Empresa", emp_nombres if emp_nombres else ["EMP-01"], key="emp_top_v5", label_visibility="collapsed")
         emp_data_principal = emp_mapa.get(emp_sel_principal,{})
         id_emp_principal = str(emp_data_principal.get('id_empresa','') or emp_sel_principal)
         emp_nombre_principal = str(emp_data_principal.get('razon_social','') or emp_sel_principal)
 
-    # MOSTRAR ID EMPRESA Y RAZON EN FILA SUPERIOR
     c1,c2,c3 = st.columns([1,2,1])
     with c1: st.text_input("ID Empresa", value=id_emp_principal, disabled=True, key="id_emp_top")
     with c2: st.text_input("Razon Social", value=emp_nombre_principal, disabled=True, key="razon_top")
@@ -250,8 +244,7 @@ if st.session_state.rol=="OFICINA_CENTRAL":
 
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
-    # ORDENES EXPEDIDAS - SIEMPRE VISIBLE O SI MENU LO PIDE
-    if menu_sel == "📦 Ordenes Expedidas" or True:
+    if menu_sel == "📦 Ordenes Expedidas":
         with st.container(border=True):
             st.subheader("📦 Ordenes Expedidas - Ventana Principal")
             if not df_oc.empty:
@@ -264,12 +257,12 @@ if st.session_state.rol=="OFICINA_CENTRAL":
                 df_show = df_oc.tail(20).iloc[::-1]
                 st.dataframe(df_show[cols_show] if cols_show else df_show, use_container_width=True, height=250)
             else:
-                st.info("Aun no hay ordenes expedidas - Aqui apareceran cuando generes una. En este momento no hay.")
+                st.info("Aun no hay ordenes expedidas.")
 
-    if menu_sel == "📦 Crear Orden":
+    elif menu_sel == "📦 Crear Orden":
         st.divider()
         st.subheader("Nueva Orden - Empresa + Finca PROPIA + Linea + Sin Concatenar")
-        # FINCAS PROPIAS DE EMPRESA
+        
         df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper()==id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
         df_fincas_propias = df_fincas_emp[df_fincas_emp['tipo'].astype(str).str.upper()=='PROPIA'] if not df_fincas_emp.empty and 'tipo' in df_fincas_emp.columns else df_fincas_emp
         fin_prop_nombres, fin_prop_mapa = lista_simple_no_concat(df_fincas_propias, "id_finca", "nombre")
@@ -309,16 +302,22 @@ if st.session_state.rol=="OFICINA_CENTRAL":
             if df_cj_filt.empty: df_cj_filt = df_cj_u
         else: df_cj_filt = df_cj_u
 
-        st.markdown("#### 👤 Operador (SIN linea)")
-        c1,c2,c3,c4 = st.columns([2,1,1,1])
+        # ==========================================
+        # VISUALIZACIÓN DE OPERADORES SIN CONCATENAR
+        # ==========================================
+        st.markdown("#### 👤 Operador (SIN línea)")
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         with c1:
             op_sel = st.selectbox("Nombre Operador", ops_nombres if ops_nombres else ["No hay"], key="op_v5", label_visibility="collapsed")
-            op_data = ops_mapa.get(op_sel,{})
-            id_op = str(op_data.get('id_operador','') or op_sel)
+            op_data = ops_mapa.get(op_sel, {})
+            id_op = str(op_data.get('id_operador', '') or op_sel)
             st.markdown(f"**{op_sel}**")
-        with c2: st.text_input("ID Op", value=id_op, disabled=True, key="id_op_v5")
-        with c3: st.text_input("Licencia", value=str(op_data.get('licencia_num','') or op_data.get('licencia','')), disabled=True, key="lic_v5")
-        with c4: st.text_input("Tel", value=str(op_data.get('telefono','')), disabled=True, key="tel_v5")
+        with c2: 
+            st.text_input("ID Op", value=id_op, disabled=True, key="id_op_v5")
+        with c3: 
+            st.text_input("Licencia", value=str(op_data.get('licencia_num', '') or op_data.get('licencia', '')), disabled=True, key="lic_v5")
+        with c4: 
+            st.text_input("Tel", value=str(op_data.get('telefono', '')), disabled=True, key="tel_v5")
 
         st.markdown(f"#### 🚛 Transporte de {lin_sel} - Datos separados")
         tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_filt)
@@ -416,11 +415,11 @@ if st.session_state.rol=="OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(str(e))
 
-    if menu_sel == "✏️ Remision/Factura":
-        st.subheader("✏️ Editar Remision/Factura aunque carro ya se fue")
+    elif menu_sel == "✏️ Remision/Factura":
+        st.subheader("✏️ Editar Remision/Factura")
         df_oc_edit,_=get_df_safe("OrdenesCarga")
         if df_oc_edit.empty:
-            st.info("No hay ordenes - aqui aparecera para editar despues")
+            st.info("No hay ordenes")
         else:
             ids = list(reversed(df_oc_edit['id_orden'].astype(str).tolist()))
             sel = st.selectbox("Orden para editar", ids[:100], key="sel_edit_v5")
@@ -428,7 +427,6 @@ if st.session_state.rol=="OFICINA_CENTRAL":
                 fila = df_oc_edit[df_oc_edit['id_orden']==sel]
                 if not fila.empty:
                     r=fila.iloc[0]
-                    st.write(f"{r.get('id_orden','')} | Lote {r.get('id_lote','')} | Rem {r.get('folio_remision','')} | Fac {r.get('folio_factura','')}")
                     c1,c2,c3,c4 = st.columns(4)
                     with c1: new_rem=st.text_input("Remision", value=str(r.get('folio_remision','') or ""), key="erem_v5")
                     with c2: new_fac=st.text_input("Factura", value=str(r.get('folio_factura','') or ""), key="efac_v5")
@@ -438,7 +436,6 @@ if st.session_state.rol=="OFICINA_CENTRAL":
                     if st.button("💾 GUARDAR", type="primary", use_container_width=True):
                         try:
                             ws=sh.worksheet("OrdenesCarga")
-                            ensure_columns_exist(ws, ["folio_remision","folio_factura","folio_factura2","id_lote","observaciones"])
                             cell=ws.find(sel)
                             headers=[str(h).strip() for h in ws.row_values(1)]
                             def idx_col(name): return headers.index(name)+1 if name in headers else None
@@ -450,7 +447,7 @@ if st.session_state.rol=="OFICINA_CENTRAL":
                             st.success("Actualizada"); st.rerun()
                         except Exception as e: st.error(str(e))
 
-    if menu_sel == "🗺️ Seguimiento":
+    elif menu_sel == "🗺️ Seguimiento":
         st.subheader("Seguimiento Ordenes-Fincas")
         if not df_of.empty:
             st.dataframe(df_of.tail(100), use_container_width=True)
@@ -460,15 +457,10 @@ if st.session_state.rol=="OFICINA_CENTRAL":
 elif st.session_state.rol=="VIGILANCIA":
     st.markdown(f"<h2 style='text-align:left;'>Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     df_of,_=get_df_safe("Orden_Fincas")
-    df_oc,_=get_df_safe("OrdenesCarga")
     if df_of.empty: st.warning("No hay ordenes"); st.stop()
     finca=st.session_state.finca_asignada
     df_f=df_of if finca.upper()=="TODAS" else df_of[df_of['id_finca'].astype(str).str.upper()==finca.upper()]
     st.metric("Pendientes", len(df_f[~df_f['estado_carga'].isin(['CARGADO_SALIO','EN_FINCA'])]))
-    for idx,row in df_f.iterrows():
-        id_ord=str(row['id_orden']).strip()
-        with st.container(border=True):
-            st.write(id_ord)
 
 else:
     st.title(f"{st.session_state.rol} - {st.session_state.finca_asignada}")
