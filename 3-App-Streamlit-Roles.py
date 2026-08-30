@@ -868,30 +868,10 @@ elif st.session_state.rol == "VIGILANCIA":
         df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
 
         info_orden = {}
-        if oc_sel != "Sin OC pendientes":
-            try:
-                _, sh_db, _ = get_db()
-                for nombre_hoja in ["OrdenesCarga", "Embarques", "Control_Embarques", "Ordenes"]:
-                    try:
-                        ws_gen = sh_db.worksheet(nombre_hoja)
-                        df_gen = pd.DataFrame(ws_gen.get_all_records())
-                        if not df_gen.empty:
-                            cols_posibles = [c for c in df_gen.columns if 'orden' in c.lower() or 'oc' in c.lower()]
-                            for col in cols_posibles:
-                                match_gen = df_gen[df_gen[col].astype(str) == str(oc_sel)]
-                                if not match_gen.empty:
-                                    info_orden = match_gen.iloc[0].to_dict()
-                                    break
-                        if info_orden: break
-                    except:
-                        continue
-            except:
-                pass
-            
-            if not info_orden and not df_pendientes.empty:
-                match_row = df_pendientes[df_pendientes['id_orden'].astype(str) == str(oc_sel)]
-                if not match_row.empty:
-                    info_orden = match_row.iloc[0].to_dict()
+        if oc_sel != "Sin OC pendientes" and not df_pendientes.empty:
+            match_row = df_pendientes[df_pendientes['id_orden'].astype(str) == str(oc_sel)]
+            if not match_row.empty:
+                info_orden = match_row.iloc[0].to_dict()
 
         id_operador_raw = str(info_orden.get('id_operador', '')).strip()
         id_tractor_raw = str(info_orden.get('id_tractor', '')).strip()
@@ -917,7 +897,7 @@ elif st.session_state.rol == "VIGILANCIA":
                 nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
 
         desc_tractor = id_tractor_raw or "No especificado"
-        placas_tractor = "No especificado"
+        placas_tractor = "No especificada"
         if not df_tr_unif.empty and id_tractor_raw:
             col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
             match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
@@ -1025,7 +1005,6 @@ elif st.session_state.rol == "VIGILANCIA":
     with tab_sal:
         st.markdown("<h3 style='color: #d9534f;'>SALIDA DE FINCA</h3>", unsafe_allow_html=True)
         
-        # Filtro corregido para buscar unidades que ya llegaron a caseta y están listas para salir
         df_salidas = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['LLEGADO_CASETA', 'EN_SITIO', 'EN FINCA'])] if not df_finca.empty else df_finca
         lista_salidas = df_salidas['id_orden'].astype(str).tolist() if not df_salidas.empty else ["Sin unidades en sitio"]
         
