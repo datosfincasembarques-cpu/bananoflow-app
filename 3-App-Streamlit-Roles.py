@@ -654,12 +654,30 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error al eliminar: {e}")
-   # --------------------------------------------------------------------------
+ # --------------------------------------------------------------------------
     # 6.5 Submódulo: 🛡️ Módulo de Vigilancia (Entrada y Salida en Caseta)
     # --------------------------------------------------------------------------
     elif menu_sel == "🛡️ Módulo de Vigilancia":
-        st.markdown("<h2 style='text-align: center; color: #28a745;'>🛡️ ENTRADA FINCA</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - 6</h2>", unsafe_allow_html=True)
+        st.markdown("Vehículos Pendientes en Finca")
         
+        # Aquí muestras tu tabla actual (asegúrate de que df_of tenga los datos filtrados para la finca 6)
+        # Ejemplo de filtrado por finca:
+        finca_actual = str(st.session_state.get('finca', '6'))
+        if 'df_of' in locals() and not df_of.empty:
+            df_finca = df_of[df_of['id_finca'].astype(str) == finca_actual]
+        else:
+            df_finca = pd.DataFrame() # O tu carga de datos correspondiente
+            
+        # Mostramos la tabla de pendientes tal como la tienes en tu captura
+        df_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', ''])] if not df_finca.empty else df_finca
+        st.dataframe(df_pendientes, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ------------------------------------------------------------------
+        # SECCIÓN DE CAPTURA DE ENTRADA Y SALIDA (Estilo Caseta)
+        # ------------------------------------------------------------------
         tab_ent, tab_sal = st.tabs(["📥 REGISTRAR ENTRADA", "📤 REGISTRAR SALIDA"])
         
         from datetime import datetime
@@ -672,27 +690,21 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         with tab_ent:
-            # Selección de Finca
-            finca_sel = st.selectbox("Finca:", [f"Finca {st.session_state.get('finca', '6')}"], key="vis_finca_sel")
+            st.markdown("<h3 style='color: #28a745;'>ENTRADA FINCA</h3>", unsafe_allow_html=True)
             
-            # Selección de Orden de Carga (OC)
-            df_pendientes = df_of[df_of['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', ''])] if not df_of.empty else df_of
+            finca_sel = st.selectbox("Finca:", [f"Finca {finca_actual}"], key="vis_finca_sel")
+            
             lista_ocs = df_pendientes['id_orden'].astype(str).tolist() if not df_pendientes.empty else ["Sin OC pendientes"]
-            
             oc_sel = st.selectbox("OC:", lista_ocs, key="vis_oc_sel")
             
-            # Campo de Placa / Guía
             placa_guia = st.text_input("Placa / Guía:", placeholder="Ej: 123-ABC / GT-8821", key="vis_placa_input")
             
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Contenedores visuales para las fotos
             st.markdown("<div style='border: 2px dashed #28a745; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
             foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE (Toca para abrir cámara)", key="vis_foto_tractor")
             st.markdown("</div>", unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            
             st.markdown("<div style='border: 2px dashed #28a745; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
             foto_caja = st.camera_input("📷 FOTO 2 - CAJA TRASERA (Toca para abrir cámara)", key="vis_foto_caja")
             st.markdown("</div>", unsafe_allow_html=True)
@@ -711,7 +723,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         dict_reg = {
                             "id_registro": id_reg,
                             "id_orden": str(oc_sel),
-                            "id_finca": str(st.session_state.get('finca', '6')),
+                            "id_finca": str(finca_actual),
                             "id_caja": str(placa_guia),
                             "tipo_evento": "LLEGADA_CASETA",
                             "fecha_hora": str(hora_dispositivo),
@@ -724,7 +736,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         ensure_columns_exist(ws_v, list(dict_reg.keys()))
                         append_row_dict_safe(ws_v, dict_reg)
                         
-                        # Actualizar estado en ordenes
                         ws_of = sh.worksheet("Orden_Fincas")
                         cell_of = ws_of.find(str(oc_sel))
                         if cell_of:
@@ -739,8 +750,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.error(f"Error al guardar: {e}")
 
         with tab_salida:
-            st.markdown("<h3 style='color: #d9534f;'>📤 SALIDA DE FINCA</h3>", unsafe_allow_html=True)
-            df_salidas = df_of[df_of['estado_carga'].astype(str).str.upper() == 'LLEGADO_CASETA'] if not df_of.empty else df_of
+            st.markdown("<h3 style='color: #d9534f;'>SALIDA DE FINCA</h3>", unsafe_allow_html=True)
+            df_salidas = df_finca[df_finca['estado_carga'].astype(str).str.upper() == 'LLEGADO_CASETA'] if not df_finca.empty else df_finca
             lista_salidas = df_salidas['id_orden'].astype(str).tolist() if not df_salidas.empty else ["Sin unidades en sitio"]
             
             oc_sal_sel = st.selectbox("OC en Sitio:", lista_salidas, key="vis_oc_sal_sel")
@@ -763,7 +774,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     dict_reg_s = {
                         "id_registro": id_reg_s,
                         "id_orden": str(oc_sal_sel),
-                        "id_finca": str(st.session_state.get('finca', '6')),
+                        "id_finca": str(finca_actual),
                         "id_caja": str(placa_sal),
                         "tipo_evento": "SALIDA_CASETA",
                         "fecha_hora": str(hora_dispositivo),
@@ -788,7 +799,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al registrar salida: {e}")
-
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
