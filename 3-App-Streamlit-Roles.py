@@ -127,11 +127,12 @@ class BananoDB:
 # =========================================================================
 def render_oficina_central_catalogos(db):
     st.markdown("### 🗂️ Oficina Central - Gestión y Órdenes")
-    t1, t2, t3, t4 = st.tabs(["🚀 Crear Orden", "🗂️ Catálogos", "📑 Guías AAPS", "📦 Bodega"])
+    t1, t2, t3, t4 = st.tabs(["🚀 Crear Orden", "🗂️ Catálogos Maestros", "📑 Guías AAPS", "📦 Bodega"])
 
     with t1:
         st.subheader("Nueva Orden de Carga (Integrada por Empresa)")
         
+        df_emp = db.get_df("Empresas")
         df_op = db.get_df("Operadores")
         df_trac = db.get_df("Tractores")
         df_caja = db.get_df("Cajas")
@@ -140,11 +141,9 @@ def render_oficina_central_catalogos(db):
         df_dest = db.get_df("Destinos")
         
         with st.form("f_oc"):
-            # REQUERIMIENTO PRINCIPAL: Seleccionar primero la empresa
-            empresa_seleccionada = st.selectbox(
-                "🏢 Empresa", 
-                ["Empresa Productora A", "Empresa Comercializadora B", "Exportadora Bananera C"]
-            )
+            # 1. SELECCIÓN DE EMPRESA PRIMERO
+            empresas_lista = df_emp['nombre_empresa'].tolist() if not df_emp.empty and 'nombre_empresa' in df_emp.columns else ["Sin Empresas Registradas"]
+            empresa_seleccionada = st.selectbox("🏢 1. Seleccione la Empresa", empresas_lista)
             
             st.markdown("---")
             c1, c2 = st.columns(2)
@@ -158,9 +157,16 @@ def render_oficina_central_catalogos(db):
                 c2_id = st.selectbox("Caja 2", [""] + c_list) if full else ""
             
             with c2:
-                f_list = df_finca['id_finca'].tolist() if not df_finca.empty and 'id_finca' in df_finca.columns else []
-                finca_titular = st.selectbox("Finca Titular Guía (PROPIA)", f_list)
-                f_ruta = st.multiselect("Ruta de Fincas (Propias y Terceros)", f_list)
+                # Filtrar fincas que pertenecen a la empresa seleccionada si existe la columna empresa en el df de fincas
+                if not df_finca.empty and 'empresa' in df_finca.columns:
+                    fincas_filtradas = df_finca[df_finca['empresa'] == empresa_seleccionada]['id_finca'].tolist()
+                    if not fincas_filtradas:
+                        fincas_filtradas = df_finca['id_finca'].tolist() # Fallback si no hay coincidencia exacta
+                else:
+                    fincas_filtradas = df_finca['id_finca'].tolist() if not df_finca.empty and 'id_finca' in df_finca.columns else []
+
+                finca_titular = st.selectbox("Finca Titular (PROPIA de la Empresa)", fincas_filtradas)
+                f_ruta = st.multiselect("Ruta de Fincas (Propias y Terceros)", fincas_filtradas)
                 cli = st.selectbox("Cliente", df_cli['id_cliente'].tolist() if not df_cli.empty and 'id_cliente' in df_cli.columns else [])
                 dest = st.selectbox("Destino", df_dest['id_destino'].tolist() if not df_dest.empty and 'id_destino' in df_dest.columns else [])
             
@@ -184,10 +190,26 @@ def render_oficina_central_catalogos(db):
 
     with t2:
         st.subheader("Catálogos Maestros")
-        cat = st.selectbox("Catálogo", ["Fincas", "Operadores", "Tractores", "Cajas", "Clientes", "Destinos", "LineasTransporte"])
+        cat = st.selectbox("Catálogo", ["Empresas", "Fincas", "Operadores", "Tractores", "Cajas", "Clientes", "Destinos", "LineasTransporte"])
+        
         with st.form("f_cat"):
-            if cat == "Fincas":
-                d = {"id_finca": st.text_input("Nombre Finca"), "tipo": st.selectbox("Tipo", ["PROPIA", "TERCERO"]), "ubicacion": st.text_input("Ubicación")}
+            if cat == "Empresas":
+                d = {
+                    "id_empresa": st.text_input("ID o Código Empresa"),
+                    "nombre_empresa": st.text_input("Razón Social / Nombre Comercial"),
+                    "rfc": st.text_input("RFC / Identificación Fiscal"),
+                    "contacto": st.text_input("Persona de Contacto y Teléfono")
+                }
+            elif cat == "Fincas":
+                df_empresas_cat = db.get_df("Empresas")
+                lista_emps = df_empresas_cat['nombre_empresa'].tolist() if not df_empresas_cat.empty and 'nombre_empresa' in df_empresas_cat.columns else ["General"]
+                
+                d = {
+                    "id_finca": st.text_input("Nombre / Código de la Finca"),
+                    "empresa": st.selectbox("Empresa a la que Pertenece", lista_emps),
+                    "tipo": st.selectbox("Tipo", ["PROPIA", "TERCERO"]),
+                    "ubicacion": st.text_input("Ubicación / Zona")
+                }
             elif cat == "Operadores":
                 d = {"id_operador": st.text_input("Nombre y Licencia"), "telefono": st.text_input("Teléfono"), "domicilio": st.text_input("Domicilio")}
             elif cat == "Tractores":
@@ -203,7 +225,8 @@ def render_oficina_central_catalogos(db):
             
             if st.form_submit_button("Guardar en Google Sheets"):
                 db.registrar_catalogo(cat, d)
-                st.success("¡Guardado con éxito!")
+                st.success(f"¡Registro guardado exitosamente en {cat}!")
+                
         st.dataframe(db.get_df(cat), use_container_width=True)
 
     with t3:
