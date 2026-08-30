@@ -169,7 +169,6 @@ def render_oficina_central_catalogos(db):
         df_dest = db.get_df("Destinos")
         
         with st.form("f_oc"):
-            # 1. SELECCIÓN DE EMPRESA PRIMERO (Usando NOMBRE_RAZON SOCIAL)
             empresas_lista = df_emp['NOMBRE_RAZON SOCIAL'].tolist() if not df_emp.empty and 'NOMBRE_RAZON SOCIAL' in df_emp.columns else ["Sin Empresas Registradas"]
             empresa_seleccionada = st.selectbox("🏢 1. Seleccione la Empresa", empresas_lista)
             
@@ -185,7 +184,6 @@ def render_oficina_central_catalogos(db):
                 c2_id = st.selectbox("Caja 2", [""] + c_list) if full else ""
             
             with c2:
-                # Filtrar fincas asociadas a la empresa seleccionada
                 if not df_finca.empty and 'empresa' in df_finca.columns:
                     fincas_filtradas = df_finca[df_finca['empresa'] == empresa_seleccionada]['id_finca'].tolist()
                     if not fincas_filtradas:
@@ -222,7 +220,6 @@ def render_oficina_central_catalogos(db):
         
         df_cat_actual = db.get_df(cat)
         
-        # Opciones de acción: Nuevo o Editar
         accion = st.radio("Acción", ["➕ Nuevo Registro", "✏️ Editar Existente"], horizontal=True)
         
         reg_a_editar = None
@@ -245,20 +242,17 @@ def render_oficina_central_catalogos(db):
 
         with st.form("f_cat"):
             if cat == "Empresas":
-                def_id = str(reg_a_editar.get("ID", "")) if reg_a_editar else ""
                 def_id_emp = str(reg_a_editar.get("ID_EMPRESA", "")) if reg_a_editar else ""
                 def_nom = str(reg_a_editar.get("NOMBRE_RAZON SOCIAL", "")) if reg_a_editar else ""
                 def_rfc = str(reg_a_editar.get("RFC", "")) if reg_a_editar else ""
                 def_cont = str(reg_a_editar.get("CONTACTO", "")) if reg_a_editar else ""
 
-                id_reg = st.text_input("ID (Consecutivo/Interno)", value=def_id)
                 id_empresa = st.text_input("ID Empresa", value=def_id_emp)
                 nombre_razon = st.text_input("Nombre / Razón Social", value=def_nom)
                 rfc = st.text_input("RFC", value=def_rfc)
                 contacto = st.text_input("Contacto", value=def_cont)
 
                 d = {
-                    "ID": id_reg,
                     "ID_EMPRESA": id_empresa,
                     "NOMBRE_RAZON SOCIAL": nombre_razon,
                     "RFC": rfc,
