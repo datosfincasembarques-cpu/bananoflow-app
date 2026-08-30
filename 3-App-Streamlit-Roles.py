@@ -266,20 +266,20 @@ def lista_simple_no_concat(df, id_key, nombre_key):
 def lista_placas_no_concat(df):
     if df.empty: 
         return [], {}
-    col_id = next((c for c in df.columns if "id_" in c.lower()), df.columns[0])
-    col_pla = next((c for c in df.columns if "placa" in c.lower()), df.columns[0])
+    col_id = next((c for c in df.columns if c.lower() in ["id_tractor", "id_caja", "id_equipo"] or "id_" in c.lower()), df.columns[0])
+    col_pla = next((c for c in df.columns if "placa" in c.lower() or "economico" in c.lower()), df.columns[1] if len(df.columns) > 1 else col_id)
     lista = []
     mapa = {}
     for _, r in df.iterrows():
         idv = str(r.get(col_id, "")).strip()
-        pla = str(r.get(col_pla, "")).strip() or idv
-        if not pla or pla.lower() == "nan": 
+        if not idv or idv.lower() == "nan": 
             continue
+        pla = str(r.get(col_pla, "")).strip() or idv
         if pla not in lista:
             lista.append(pla)
         mapa[pla] = r.to_dict()
+        mapa[idv] = r.to_dict()
     return sorted(lista), mapa
-
 
 # ==============================================================================
 # 6. CUERPO PRINCIPAL - ROL: OFICINA CENTRAL
