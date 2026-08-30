@@ -1,474 +1,316 @@
-
-"""
-3 - APP BANANO V5 - TITULO ARRIBA IZQ + EMPRESA PRIMER PLANO + PANEL IZQ + SIN CONCATENAR + REMISION/FACTURA
-"""
-
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-import gspread
+import datetime
+import os, json
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-
-st.set_page_config(page_title="Embarques V5 - Empresa Primer Plano", layout="wide", page_icon="🍌")
+from googleapiclient.http import MediaFileUpload
+import gspread
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-FOTOS_FOLDER_ID = st.secrets["app_config"]["fotos_folder_id"] if "app_config" in st.secrets else "1AW6qmZddxQG12q4rHKQmro7Ai3RYXhAR"
-SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
+FOTOS_BANANO_FOLDER_ID = "1AW6qmZddxQG12q4rHKQmro7Ai3RYXhAR"
 
-@st.cache_resource
-def get_db():
-    creds_dict = dict(st.secrets["google_credentials"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    client = gspread.authorize(creds)
-    sh = client.open(SPREADSHEET_NAME)
-    drive_service = build('drive', 'v3', credentials=creds)
-    return client, sh, drive_service
-
-def get_df_safe(sheet_name):
-    mapa = {
-        "Tractos": ["Tractos","Tractocamiones"],
-        "Tractocamiones": ["Tractocamiones","Tractos"],
-        "Cajas": ["Cajas","Cajas_Thermoking"],
-        "Cajas_Thermoking": ["Cajas_Thermoking","Cajas"],
-    }
-    candidatos = mapa.get(sheet_name, [sheet_name])
-    for name in candidatos:
+class BananoDB:
+    def __init__(self, json_key_path="credentials.json", spreadsheet_name="Sistema_Banano_BD", drive_folder_id=FOTOS_BANANO_FOLDER_ID):
         try:
-            ws = sh.worksheet(name)
-            df = pd.DataFrame(ws.get_all_records(), dtype=str)
-            df.columns = [str(c).strip() for c in df.columns]
-            return df, ws
-        except: continue
-    try:
-        for ws in sh.worksheets():
-            tl = ws.title.lower()
-            sl = sheet_name.lower()
-            if "tracto" in sl and "tracto" in tl:
-                df = pd.DataFrame(ws.get_all_records(), dtype=str)
-                df.columns=[str(c).strip() for c in df.columns]
-                return df, ws
-            if "caja" in sl and "caja" in tl:
-                df = pd.DataFrame(ws.get_all_records(), dtype=str)
-                df.columns=[str(c).strip() for c in df.columns]
-                return df, ws
-    except: pass
-    return pd.DataFrame(dtype=str), None
+            if "google_credentials" in st.secrets:
+                creds_info = dict(st.secrets["google_credentials"])
+                creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+                spreadsheet_name = st.secrets["app_config"].get("spreadsheet_name", spreadsheet_name)
+                drive_folder_id = st.secrets["app_config"].get("fotos_folder_id", drive_folder_id)
+            else:
+                raise KeyError
+        except Exception:
+            if os.path.exists(json_key_path):
+                creds = Credentials.from_service_account_file(json_key_path, scopes=SCOPES)
+            else:
+                creds_info = json.loads(os.environ.get("GOOGLE_CREDENTIALS_JSON","{}"))
+                creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
 
-def ensure_columns_exist(ws, cols):
-    try:
-        headers = [str(h).strip() for h in ws.row_values(1)]
-        for col in cols:
-            if col not in headers:
-                ws.update_cell(1, len(headers)+1, col)
-                headers.append(col)
-    except: pass
+        self.client = gspread.authorize(creds)
+        self.sh = self.client.open(spreadsheet_name)
+        self.drive_service = build('drive', 'v3', credentials=creds)
+        self.drive_folder_id = drive_folder_id
 
-def append_row_dict_safe(ws, data_dict):
-    try:
-        ensure_columns_exist(ws, list(data_dict.keys()))
-        headers = [str(h).strip() for h in ws.row_values(1)]
-        row = [str(data_dict.get(h,"")) for h in headers]
+    def get_df(self, sheet_name):
+        try:
+            ws = self.sh.worksheet(sheet_name)
+            return pd.DataFrame(ws.get_all_records())
+        except:
+            return pd.DataFrame()
+
+    def append_row_dict(self, sheet_name, data_dict):
+        ws = self.sh.worksheet(sheet_name)
+        headers = ws.row_values(1)
+        row = [data_dict.get(h, "") for h in headers]
         ws.append_row(row, value_input_option='USER_ENTERED')
         return True
-    except Exception as e:
-        st.error(f"Error guardando: {e}")
-        return False
 
-def subir_foto_a_drive(file_uploader, nombre_archivo):
-    try:
-        if file_uploader is None: return ""
-        import tempfile, os
-        from googleapiclient.http import MediaFileUpload
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(file_uploader.getbuffer())
-            tmp_path = tmp.name
-        file_metadata = {'name': nombre_archivo, 'parents': [FOTOS_FOLDER_ID] if FOTOS_FOLDER_ID else []}
-        media = MediaFileUpload(tmp_path, mimetype='image/jpeg')
-        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-        try: drive_service.permissions().create(fileId=file['id'], body={'type':'anyone','role':'reader'}).execute()
-        except: pass
-        os.unlink(tmp_path)
-        return file.get('webViewLink','')
-    except Exception as e:
-        st.error(f"Error foto: {e}")
-        return ""
+    def registrar_catalogo(self, sheet_name, data_dict):
+        try:
+            self.append_row_dict(sheet_name, data_dict)
+            return True
+        except Exception as e:
+            print(f"Error al registrar en {sheet_name}: {e}")
+            return False
 
-try:
-    client, sh, drive_service = get_db()
-    conectado=True
-except Exception as e:
-    conectado=False
-    err_conexion=str(e)
+    def registrar_termografo_o_filtro(self, tipo_item, folio, marca, estado="DISPONIBLE"):
+        sheet_name = "Thermografos" if tipo_item == "THERMOGRAFO" else "Filtros"
+        id_item = f"{tipo_item[0]}-{folio}"
+        data = {
+            "id_item": id_item,
+            "folio": folio,
+            "marca": marca,
+            "estado": estado,
+            "fecha_registro": datetime.datetime.now().isoformat()
+        }
+        return self.append_row_dict(sheet_name, data)
 
-ROLES=["OFICINA_CENTRAL","VIGILANCIA","JEFE_PLANTA","ESTIBA"]
-if 'rol' not in st.session_state:
-    for k in ["rol","id_finca","usuario","username","nombre_usuario","id_usuario","finca_asignada","menu_oficina"]:
-        st.session_state[k]=None
+    def registrar_compra_guias(self, cantidad, precio, folio_compra):
+        id_compra = f"COMP-{datetime.datetime.now().strftime('%Y%m%d%H%M')}"
+        self.append_row_dict("Compra_Guias", {
+            "id_compra": id_compra,
+            "fecha_compra": datetime.datetime.now().isoformat(),
+            "cantidad_juegos": cantidad,
+            "precio_unitario": precio,
+            "importe_total": cantidad*precio,
+            "folio_compra_AAPS": folio_compra,
+            "estado": "DISPONIBLE"
+        })
+        tipos = ["R", "E", "P", "D4", "D5"]
+        for tipo in tipos:
+            for i in range(1, cantidad+1):
+                folio = f"{tipo}{i:02d}" if tipo in ["R","E","P"] else f"{tipo}-{i:02d}"
+                self.append_row_dict("Guias_Folios_Stock", {
+                    "id_folio": f"{id_compra}-{tipo}-{i}",
+                    "id_compra": id_compra,
+                    "tipo_documento": tipo,
+                    "folio": folio,
+                    "estado": "DISPONIBLE"
+                })
+        return id_compra
 
-with st.sidebar:
-    st.markdown("### 🍌 Embarques")
-    st.caption("Panel Opciones Izquierda")
-    if conectado: st.success(f"Conectado: {SPREADSHEET_NAME}")
-    else: st.error(err_conexion)
-    if st.session_state.rol is None:
-        rol=st.selectbox("Rol", ROLES)
-        df_usuarios_raw,_=get_df_safe("Usuarios")
-        if df_usuarios_raw.empty:
-            df_usuarios=pd.DataFrame([{"id_usuario":"USR-OF-001","nombre":"Martin Gomez","rol":"OFICINA_CENTRAL","finca_asignada":"TODAS","username":"Martin.oficina","password_hash":"1234","activo":"TRUE"}], dtype=str)
-        else:
-            df_usuarios=df_usuarios_raw.copy()
-            rename={}
-            for col in df_usuarios.columns:
-                c=str(col).lower().strip()
-                if "id_usuario" in c: rename[col]="id_usuario"
-                elif "nombre" in c: rename[col]="nombre"
-                elif c=="rol": rename[col]="rol"
-                elif "finca" in c: rename[col]="finca_asignada"
-                elif "username" in c or "usuario" in c: rename[col]="username"
-                elif "password" in c or "pass" in c: rename[col]="password_hash"
-                elif "activo" in c: rename[col]="activo"
-            df_usuarios=df_usuarios.rename(columns=rename)
-        df_activos=df_usuarios[df_usuarios["activo"].astype(str).str.upper().isin(["TRUE","SI","1","ACTIVO"])] if "activo" in df_usuarios.columns else df_usuarios
-        if df_activos.empty: df_activos=df_usuarios
-        df_filt=df_activos[df_activos["rol"].astype(str).str.upper()==rol.upper()] if not df_activos.empty else df_activos
-        if df_filt.empty: df_filt=df_activos
-        opciones=[]; mapa={}
-        for _,r in df_filt.iterrows():
-            username=str(r.get("username","")).strip() or str(r.get("id_usuario","")).strip()
-            if username and username not in opciones:
-                opciones.append(username); mapa[username]=r
-        if not opciones: opciones=["Martin.oficina"]
-        usuario_sel=st.selectbox("Usuario", opciones)
-        r_sel=mapa.get(usuario_sel)
-        if r_sel is not None:
-            id_usuario=str(r_sel.get("id_usuario","")).strip()
-            username=str(r_sel.get("username","")).strip()
-            nombre_usuario=str(r_sel.get("nombre","")).strip()
-            rol_real=str(r_sel.get("rol",rol)).strip()
-            finca_asignada=str(r_sel.get("finca_asignada","")).strip()
-            pass_bd=str(r_sel.get("password_hash","")).strip()
-        else:
-            id_usuario=""; username=usuario_sel; nombre_usuario=username; rol_real=rol; finca_asignada="TODAS"; pass_bd=""
-        st.caption(f"User:{username}")
-        pwd=st.text_input("Contraseña", type="password")
-        if st.button("Entrar"):
-            ok = pwd in ["1234","Banano2026",pass_bd] or pwd.lower()==username.lower() or (finca_asignada and pwd.upper()==finca_asignada.upper())
-            if ok:
-                st.session_state.rol=rol_real or rol
-                st.session_state.finca_asignada=finca_asignada
-                st.session_state.id_finca=finca_asignada if finca_asignada!="TODAS" else "OFICINA"
-                st.session_state.username=username
-                st.session_state.id_usuario=id_usuario
-                st.session_state.nombre_usuario=nombre_usuario
-                st.session_state.menu_oficina="📦 Crear Orden"
-                st.rerun()
-            else: st.error("Incorrecta")
-    else:
-        st.success(f"{st.session_state.rol}")
-        st.text(f"{st.session_state.username}")
-        st.text(f"Finca: {st.session_state.finca_asignada}")
-        st.divider()
-        st.markdown("### 📋 Panel Opciones")
-        if st.session_state.rol=="OFICINA_CENTRAL":
-            menu = st.radio("Menu", ["📦 Ordenes Expedidas", "📦 Crear Orden", "✏️ Remision/Factura", "🗺️ Seguimiento"], index=1, key="radio_menu_oficina")
-            st.session_state.menu_oficina = menu
-        st.divider()
-        if st.button("Salir"):
-            for k in ["rol","id_finca","finca_asignada","usuario","username","id_usuario","nombre_usuario","menu_oficina"]: st.session_state[k]=None
-            st.rerun()
+    def crear_orden_carga(self, operador_id, tractor_id, caja1_id, caja2_id, fincas_ids, cliente_id, destino_id):
+        folio = f"OC-{datetime.datetime.now().strftime('%Y%m%d')}-{operador_id}"
+        id_orden = folio
+        data = {
+            "id_orden": id_orden,
+            "folio_orden": folio,
+            "fecha_creacion": datetime.datetime.now().isoformat(),
+            "id_usuario_crea": "OFICINA_CENTRAL",
+            "id_operador": operador_id,
+            "id_tractor": tractor_id,
+            "id_caja1": caja1_id,
+            "id_caja2": caja2_id if caja2_id else "",
+            "id_cliente": cliente_id,
+            "id_destino": destino_id,
+            "id_lote": f"LOTE-{id_orden}",
+            "estado": "ABIERTA",
+            "ruta_fincas_ids": ",".join(fincas_ids)
+        }
+        self.append_row_dict("OrdenesCarga", data)
+        for idx, finca_id in enumerate(fincas_ids):
+            self.append_row_dict("Orden_Fincas", {
+                "id": f"{id_orden}-{finca_id}",
+                "id_orden": id_orden,
+                "id_finca": finca_id,
+                "orden_visita": idx+1,
+                "estado_carga": "PENDIENTE"
+            })
+        return id_orden
 
-if st.session_state.rol is None:
-    st.stop()
 
-def lista_simple_no_concat(df, id_key, nombre_key):
-    if df.empty: return [], {}
-    col_id = next((c for c in df.columns if id_key.lower() in c.lower()), df.columns[0])
-    col_nom = next((c for c in df.columns if nombre_key.lower() in c.lower()), df.columns[1] if len(df.columns)>1 else col_id)
-    lista=[]; mapa={}; seen=set()
-    for _,r in df.iterrows():
-        idv=str(r.get(col_id,"")).strip()
-        if not idv or idv.lower()=="nan": continue
-        nom=str(r.get(col_nom,"")).strip() or idv
-        if nom.lower() in ["nan",""]: continue
-        if nom not in seen:
-            lista.append(nom); seen.add(nom)
-        mapa[nom]=r.to_dict()
-    return sorted(lista), mapa
+# =========================================================================
+# MÓDULO 1: OFICINA CENTRAL
+# =========================================================================
+def render_oficina_central_catalogos(db):
+    st.markdown("### 🗂️ Oficina Central - Gestión y Órdenes")
+    t1, t2, t3, t4 = st.tabs(["🚀 Crear Orden", "🗂️ Catálogos", "📑 Guías AAPS", "📦 Bodega"])
 
-def lista_placas_no_concat(df):
-    if df.empty: return [], {}
-    col_id = next((c for c in df.columns if "id_" in c.lower()), df.columns[0])
-    col_pla = next((c for c in df.columns if "placa" in c.lower()), df.columns[0])
-    lista=[]; mapa={}
-    for _,r in df.iterrows():
-        idv=str(r.get(col_id,"")).strip()
-        pla=str(r.get(col_pla,"")).strip() or idv
-        if not pla or pla.lower()=="nan": continue
-        if pla not in lista:
-            lista.append(pla)
-        mapa[pla]=r.to_dict()
-    return sorted(lista), mapa
+    with t1:
+        st.subheader("Nueva Orden de Carga")
+        df_op = db.get_df("Operadores")
+        df_trac = db.get_df("Tractores")
+        df_caja = db.get_df("Cajas")
+        df_finca = db.get_df("Fincas")
+        df_cli = db.get_df("Clientes")
+        df_dest = db.get_df("Destinos")
+        
+        with st.form("f_oc"):
+            c1, c2 = st.columns(2)
+            with c1:
+                op = st.selectbox("Operador", df_op['id_operador'].tolist() if not df_op.empty and 'id_operador' in df_op.columns else [])
+                tr = st.selectbox("Tractocamión", df_trac['id_tractor'].tolist() if not df_trac.empty and 'id_tractor' in df_trac.columns else [])
+                c_list = df_caja['id_caja'].tolist() if not df_caja.empty and 'id_caja' in df_caja.columns else []
+                c1_id = st.selectbox("Caja 1", c_list)
+                full = st.checkbox("¿Full (2 Cajas)?")
+                c2_id = st.selectbox("Caja 2", [""] + c_list) if full else ""
+            with c2:
+                f_list = df_finca['id_finca'].tolist() if not df_finca.empty and 'id_finca' in df_finca.columns else []
+                st.selectbox("Finca Titular", f_list)
+                f_ruta = st.multiselect("Ruta de Fincas", f_list)
+                cli = st.selectbox("Cliente", df_cli['id_cliente'].tolist() if not df_cli.empty and 'id_cliente' in df_cli.columns else [])
+                dest = st.selectbox("Destino", df_dest['id_destino'].tolist() if not df_dest.empty and 'id_destino' in df_dest.columns else [])
+            
+            if st.form_submit_button("💾 Generar Orden"):
+                if f_ruta:
+                    folio = db.crear_orden_carga(op, tr, c1_id, c2_id, f_ruta, cli, dest)
+                    st.success(f"Orden creada con éxito: {folio}")
+                else:
+                    st.error("Seleccione al menos una finca en ruta.")
 
-# ================= OFICINA CENTRAL V5 =================
-if st.session_state.rol=="OFICINA_CENTRAL":
-    df_emp,_=get_df_safe("Empresas")
-    df_fin,_=get_df_safe("Fincas")
-    df_lin,_=get_df_safe("LineasTransporte")
-    df_op,_=get_df_safe("Operadores")
-    df_tr,_=get_df_safe("Tractos")
-    df_tr2,_=get_df_safe("Tractocamiones")
-    df_cj,_=get_df_safe("Cajas")
-    df_cj2,_=get_df_safe("Cajas_Thermoking")
-    df_cli,_=get_df_safe("Clientes")
-    df_des,_=get_df_safe("Destinos")
-    df_oc,_=get_df_safe("OrdenesCarga")
-    df_of,_=get_df_safe("Orden_Fincas")
-    df_tr_u = pd.concat([df_tr, df_tr2], ignore_index=True) if not df_tr.empty and not df_tr2.empty else (df_tr if not df_tr.empty else df_tr2)
-    df_cj_u = pd.concat([df_cj, df_cj2], ignore_index=True) if not df_cj.empty and not df_cj2.empty else (df_cj if not df_cj.empty else df_cj2)
-
-    emp_nombres, emp_mapa = lista_simple_no_concat(df_emp, "id_empresa", "razon_social")
-
-    # TITULO ARRIBA A LA IZQUIERDA
-    col_title, col_emp_top = st.columns([2,2])
-    with col_title:
-        st.markdown(f"<h2 style='margin:0; text-align:left;'>Oficina Central - {st.session_state.username}</h2>", unsafe_allow_html=True)
-        st.caption(f"{st.session_state.nombre_usuario} | {st.session_state.finca_asignada}")
-    with col_emp_top:
-        # EMPRESA EN PRIMER PLANO - ARRIBA IZQUIERDA
-        st.markdown("**🏢 Empresa Expedidora (Primer Plano)**")
-        emp_sel_principal = st.selectbox("Empresa", emp_nombres if emp_nombres else ["EMP-01"], key="emp_top_v5", label_visibility="collapsed")
-        emp_data_principal = emp_mapa.get(emp_sel_principal,{})
-        id_emp_principal = str(emp_data_principal.get('id_empresa','') or emp_sel_principal)
-        emp_nombre_principal = str(emp_data_principal.get('razon_social','') or emp_sel_principal)
-
-    # MOSTRAR ID EMPRESA Y RAZON EN FILA SUPERIOR
-    c1,c2,c3 = st.columns([1,2,1])
-    with c1: st.text_input("ID Empresa", value=id_emp_principal, disabled=True, key="id_emp_top")
-    with c2: st.text_input("Razon Social", value=emp_nombre_principal, disabled=True, key="razon_top")
-    with c3: st.text_input("Usuario", value=st.session_state.username, disabled=True)
-
-    menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
-
-    # ORDENES EXPEDIDAS - SIEMPRE VISIBLE O SI MENU LO PIDE
-    if menu_sel == "📦 Ordenes Expedidas" or True:
-        with st.container(border=True):
-            st.subheader("📦 Ordenes Expedidas - Ventana Principal")
-            if not df_oc.empty:
-                colm1, colm2, colm3, colm4 = st.columns(4)
-                with colm1: st.metric("Total", len(df_oc))
-                with colm2: st.metric("Abiertas", len(df_oc[df_oc['estado'].astype(str).str.upper()=='ABIERTA']) if 'estado' in df_oc.columns else 0)
-                with colm3: st.metric("En Finca", len(df_of[df_of['estado_carga'].astype(str).str.upper()=='EN_FINCA']) if not df_of.empty else 0)
-                with colm4: st.metric("Cerradas", len(df_oc[df_oc['estado'].astype(str).str.upper()=='CERRADA']) if not df_oc.empty else 0)
-                cols_show = [c for c in ["id_orden","empresa_nombre","id_finca_guia_titular","id_operador","id_tractor","id_caja1","id_lote","folio_remision","folio_factura","estado","fecha_creacion"] if c in df_oc.columns]
-                df_show = df_oc.tail(20).iloc[::-1]
-                st.dataframe(df_show[cols_show] if cols_show else df_show, use_container_width=True, height=250)
+    with t2:
+        st.subheader("Catálogos Maestros")
+        cat = st.selectbox("Catálogo", ["Fincas", "Operadores", "Tractores", "Cajas", "Clientes", "Destinos", "LineasTransporte"])
+        with st.form("f_cat"):
+            if cat == "Fincas":
+                d = {"id_finca": st.text_input("Nombre Finca"), "tipo": st.selectbox("Tipo", ["PROPIA", "TERCERO"]), "ubicacion": st.text_input("Ubicación")}
+            elif cat == "Operadores":
+                d = {"id_operador": st.text_input("Nombre y Licencia"), "telefono": st.text_input("Teléfono"), "domicilio": st.text_input("Domicilio")}
+            elif cat == "Tractores":
+                d = {"id_tractor": st.text_input("Placas"), "modelo": st.text_input("Modelo"), "linea": st.text_input("Línea"), "num_economico": st.text_input("Económico")}
+            elif cat == "Cajas":
+                d = {"id_caja": st.text_input("Placas Caja"), "num_economico": st.text_input("Económico"), "linea": st.text_input("Línea")}
+            elif cat == "Clientes":
+                d = {"id_cliente": st.text_input("Razón Social"), "rfc": st.text_input("RFC"), "domicilio": st.text_input("Domicilio")}
+            elif cat == "Destinos":
+                d = {"id_destino": st.text_input("ID Destino")}
             else:
-                st.info("Aun no hay ordenes expedidas - Aqui apareceran cuando generes una. En este momento no hay.")
+                d = {"razon_social": st.text_input("Razón Social"), "rfc": st.text_input("RFC"), "telefono": st.text_input("Teléfono")}
+            
+            if st.form_submit_button("Guardar en Google Sheets"):
+                db.registrar_catalogo(cat, d)
+                st.success("¡Guardado con éxito!")
+        st.dataframe(db.get_df(cat), use_container_width=True)
 
-    if menu_sel == "📦 Crear Orden":
-        st.divider()
-        st.subheader("Nueva Orden - Empresa + Finca PROPIA + Linea + Sin Concatenar")
-        # FINCAS PROPIAS DE EMPRESA
-        df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper()==id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
-        df_fincas_propias = df_fincas_emp[df_fincas_emp['tipo'].astype(str).str.upper()=='PROPIA'] if not df_fincas_emp.empty and 'tipo' in df_fincas_emp.columns else df_fincas_emp
-        fin_prop_nombres, fin_prop_mapa = lista_simple_no_concat(df_fincas_propias, "id_finca", "nombre")
-        fin_todos_nombres, fin_todos_mapa = lista_simple_no_concat(df_fin, "id_finca", "nombre")
-        lin_nombres, lin_mapa = lista_simple_no_concat(df_lin, "id_linea", "razon_social")
-        ops_nombres, ops_mapa = lista_simple_no_concat(df_op, "id_operador", "nombre")
+    with t3:
+        st.subheader("Guías Fitosanitarias AAPS")
+        with st.form("f_guias"):
+            j = st.number_input("Juegos", 1, 100, 20)
+            p = st.number_input("Precio Unitario", 0.0, 1000.0, 250.0)
+            fa = st.text_input("Factura AAPS")
+            if st.form_submit_button("Registrar Compra y Folios"):
+                db.registrar_compra_guias(int(j), float(p), fa)
+                st.success("Folios generados correctamente.")
+        st.dataframe(db.get_df("Guias_Folios_Stock"), use_container_width=True)
 
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            st.markdown("**Finca Titular Guia (PROPIA de empresa)**")
-            fin_guia_sel = st.selectbox("Finca PROPIA", fin_prop_nombres if fin_prop_nombres else fin_todos_nombres, key="fin_guia_v5")
-            fin_guia_data = fin_prop_mapa.get(fin_guia_sel,{}) or fin_todos_mapa.get(fin_guia_sel,{})
-            id_fin_guia = str(fin_guia_data.get('id_finca','') or fin_guia_sel)
-            st.text_input("ID Finca Guia", value=id_fin_guia, disabled=True, key="id_fin_guia_v5")
-        with col_f2:
-            st.markdown("**Ruta carga (propias y terceros)**")
-            fin_ruta_sel = st.multiselect("Fincas donde cargara", fin_todos_nombres, key="fin_ruta_v5")
-            ids_fin_ruta=[]
-            for fn in fin_ruta_sel:
-                d=fin_todos_mapa.get(fn,{})
-                ids_fin_ruta.append(str(d.get('id_finca','') or fn))
+    with t4:
+        st.subheader("Inventario de Bodega")
+        with st.form("f_bodega"):
+            t = st.selectbox("Tipo", ["THERMOGRAFO", "FILTRO"])
+            f = st.text_input("Folio / Serie")
+            m = st.text_input("Marca")
+            if st.form_submit_button("Agregar"):
+                db.registrar_termografo_o_filtro(t, f, m)
+                st.success("Agregado a bodega.")
+        
+        c_b1, c_b2 = st.columns(2)
+        with c_b1:
+            st.markdown("**Thermografos**")
+            st.dataframe(db.get_df("Thermografos"), use_container_width=True)
+        with c_b2:
+            st.markdown("**Filtros**")
+            st.dataframe(db.get_df("Filtros"), use_container_width=True)
 
-        col_l1, col_l2 = st.columns([2,1])
-        with col_l1:
-            lin_sel = st.selectbox("🚛 Linea Transporte duena", lin_nombres if lin_nombres else ["LIN-01"], key="lin_v5")
-            lin_data = lin_mapa.get(lin_sel,{})
-            id_lin = str(lin_data.get('id_linea','') or lin_sel)
-        with col_l2:
-            st.text_input("ID Linea", value=id_lin, disabled=True, key="id_lin_v5")
 
-        if not df_tr_u.empty and 'id_linea' in df_tr_u.columns:
-            df_tr_filt = df_tr_u[df_tr_u['id_linea'].astype(str).str.upper()==id_lin.upper()]
-            if df_tr_filt.empty: df_tr_filt = df_tr_u
-        else: df_tr_filt = df_tr_u
-        if not df_cj_u.empty and 'id_linea' in df_cj_u.columns:
-            df_cj_filt = df_cj_u[df_cj_u['id_linea'].astype(str).str.upper()==id_lin.upper()]
-            if df_cj_filt.empty: df_cj_filt = df_cj_u
-        else: df_cj_filt = df_cj_u
+# =========================================================================
+# MÓDULO 2: CASETA DE VIGILANCIA
+# =========================================================================
+def render_caseta_vigilancia(db):
+    st.markdown("### 🛡️ Caseta de Vigilancia - Control de Ingreso / Salida")
+    df_ord = db.get_df("OrdenesCarga")
+    
+    if df_ord.empty:
+        st.info("No hay órdenes de carga registradas todavía.")
+        return
 
-        st.markdown("#### 👤 Operador (SIN linea)")
-        c1,c2,c3,c4 = st.columns([2,1,1,1])
-        with c1:
-            op_sel = st.selectbox("Nombre Operador", ops_nombres if ops_nombres else ["No hay"], key="op_v5", label_visibility="collapsed")
-            op_data = ops_mapa.get(op_sel,{})
-            id_op = str(op_data.get('id_operador','') or op_sel)
-            st.markdown(f"**{op_sel}**")
-        with c2: st.text_input("ID Op", value=id_op, disabled=True, key="id_op_v5")
-        with c3: st.text_input("Licencia", value=str(op_data.get('licencia_num','') or op_data.get('licencia','')), disabled=True, key="lic_v5")
-        with c4: st.text_input("Tel", value=str(op_data.get('telefono','')), disabled=True, key="tel_v5")
+    ordenes_activas = df_ord[df_ord['estado'] == 'ABIERTA']['id_orden'].tolist()
+    sel_orden = st.selectbox("Seleccione Orden de Carga Abierta", ordenes_activas if ordenes_activas else ["Sin órdenes abiertas"])
 
-        st.markdown(f"#### 🚛 Transporte de {lin_sel} - Datos separados")
-        tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_filt)
-        cj_placas, cj_mapa_placa = lista_placas_no_concat(df_cj_filt)
-        cli_nombres, cli_mapa = lista_simple_no_concat(df_cli, "id_cliente", "razon_social")
-        des_nombres, des_mapa = lista_simple_no_concat(df_des, "id_destino", "ciudad")
+    if sel_orden and sel_orden != "Sin órdenes abiertas":
+        with st.form("form_caseta"):
+            st.markdown("#### Registro en Caseta")
+            sello = st.text_input("Número de Sello de Seguridad")
+            termografo_folio = st.text_input("Folio Termógrafo Instalado")
+            filtro_folio = st.text_input("Folio Filtro Instalado")
+            
+            st.markdown("Evidencia Fotográfica (Unidad / Sello)")
+            foto_subida = st.file_uploader("Subir Fotografía", type=["jpg", "png", "jpeg"])
 
-        ct1, ct2, ct3 = st.columns(3)
-        with ct1:
-            st.markdown("**Tracto**")
-            tr_placa_sel = st.selectbox("Placa Tracto", tr_placas if tr_placas else ["No hay"], key="tr_placa_v5", label_visibility="collapsed")
-            tr_data = tr_mapa_placa.get(tr_placa_sel,{})
-            id_tr = str(tr_data.get('id_tractor','') or tr_placa_sel)
-            st.text_input("ID Tracto", value=id_tr, disabled=True, key="id_tr_v5")
-            st.text_input("Placas", value=str(tr_data.get('placas','') or tr_placa_sel), disabled=True, key="placa_tr_v5")
-            st.text_input("Marca", value=str(tr_data.get('marca','')), disabled=True, key="marca_tr_v5")
-            st.text_input("Num Eco", value=str(tr_data.get('num_economico','')), disabled=True, key="econ_tr_v5")
-        with ct2:
-            st.markdown("**Caja 1**")
-            cj1_placa_sel = st.selectbox("Placa Caja1", cj_placas if cj_placas else ["No hay"], key="cj1_placa_v5", label_visibility="collapsed")
-            cj1_data = cj_mapa_placa.get(cj1_placa_sel,{})
-            id_cj1 = str(cj1_data.get('id_caja','') or cj1_placa_sel)
-            st.text_input("ID Caja1", value=id_cj1, disabled=True, key="id_cj1_v5")
-            st.text_input("Placa Caja1", value=str(cj1_data.get('placas','') or cj1_placa_sel), disabled=True, key="placa_cj1_v5")
-            st.text_input("Capacidad", value=str(cj1_data.get('capacidad_cajas','')), disabled=True, key="cap_cj1_v5")
-        with ct3:
-            st.markdown("**Caja 2 Full**")
-            cj2_placa_sel = st.selectbox("Caja2", ["(Vacio - Sencillo)"]+cj_placas, key="cj2_placa_v5", label_visibility="collapsed")
-            if cj2_placa_sel!="(Vacio - Sencillo)":
-                cj2_data = cj_mapa_placa.get(cj2_placa_sel,{})
-                id_cj2 = str(cj2_data.get('id_caja','') or cj2_placa_sel)
-                st.text_input("ID Caja2", value=id_cj2, disabled=True, key="id_cj2_v5")
-            else:
-                id_cj2=""
+            if st.form_submit_button("Confirmar Inspección y Salida de Caseta"):
+                link_foto = ""
+                if foto_subida is not None:
+                    temp_path = os.path.join(".", foto_subida.name)
+                    with open(temp_path, "wb") as f:
+                        f.write(foto_subida.getbuffer())
+                    link_foto = db.subir_foto_drive(temp_path, foto_subida.name)
+                    os.remove(temp_path)
+                
+                db.append_row_dict("Caseta_Control", {
+                    "id_registro": f"CASETA-{sel_orden}",
+                    "id_orden": sel_orden,
+                    "fecha_hora": datetime.datetime.now().isoformat(),
+                    "sello": sello,
+                    "termografo": termografo_folio,
+                    "filtro": filtro_folio,
+                    "foto_url": link_foto,
+                    "estado": "VERIFICADO"
+                })
+                st.success(f"Caseta registrada exitosamente para la orden {sel_orden}.")
 
-        st.markdown("### 📄 Remision y Factura")
-        r1,r2,r3,r4 = st.columns(4)
-        with r1: lote_val = st.text_input("Lote", placeholder="17-1355", key="lote_v5")
-        with r2: rem_val = st.text_input("Folio Remision", placeholder="REM-00123", key="rem_v5")
-        with r3: fac_val = st.text_input("Folio Factura", placeholder="FAC-00123", key="fac_v5")
-        with r4: fac2_val = st.text_input("Factura2 Full", placeholder="FAC-00124", key="fac2_v5")
 
-        col_cli1, col_cli2 = st.columns(2)
-        with col_cli1:
-            cli_sel = st.selectbox("Cliente", cli_nombres if cli_nombres else ["No hay"], key="cli_v5")
-            cli_data = cli_mapa.get(cli_sel,{})
-            id_cli = str(cli_data.get('id_cliente','') or cli_sel)
-        with col_cli2:
-            des_sel = st.selectbox("Destino", des_nombres if des_nombres else ["No hay"], key="des_v5")
-            des_data = des_mapa.get(des_sel,{})
-            id_des = str(des_data.get('id_destino','') or des_sel)
-        obs_val = st.text_area("Observaciones", key="obs_v5")
+# =========================================================================
+# MÓDULO 3: PLANTA EMPACADORA / FINCA
+# =========================================================================
+def render_planta_empacadora(db):
+    st.markdown("### 🍌 Planta Empacadora - Recepción en Finca y Carga")
+    df_ord = db.get_df("OrdenesCarga")
+    
+    if df_ord.empty:
+        st.info("No hay órdenes disponibles para empacadora.")
+        return
 
-        if st.button("✅ GENERAR ORDEN V5", type="primary", use_container_width=True):
-            if not fin_ruta_sel:
-                st.warning("Selecciona fincas ruta")
-            elif "No hay" in tr_placa_sel or "No hay" in cj1_placa_sel:
-                st.warning("Falta tracto/caja")
-            else:
-                try:
-                    id_orden = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op}"
-                    ws_ord = sh.worksheet("OrdenesCarga")
-                    ensure_columns_exist(ws_ord, ["id_empresa_expedidora","empresa_nombre","id_finca_guia_titular","id_linea","linea_nombre","folio_remision","folio_factura","folio_factura2","id_lote","observaciones","ruta_fincas_ids"])
-                    row = {
-                        "id_orden": id_orden,
-                        "folio_orden": id_orden,
-                        "fecha_creacion": datetime.now().isoformat(),
-                        "id_usuario_crea": st.session_state.username,
-                        "id_empresa_expedidora": id_emp_principal,
-                        "empresa_nombre": emp_nombre_principal,
-                        "id_finca_guia_titular": id_fin_guia,
-                        "id_operador": id_op,
-                        "id_tractor": id_tr,
-                        "id_caja1": id_cj1,
-                        "id_caja2": id_cj2,
-                        "id_linea": id_lin,
-                        "linea_nombre": lin_sel,
-                        "id_cliente": id_cli,
-                        "id_destino": id_des,
-                        "id_lote": lote_val if lote_val else f"LOTE-{id_orden}",
-                        "folio_remision": rem_val,
-                        "folio_factura": fac_val,
-                        "folio_factura2": fac2_val,
-                        "estado": "ABIERTA",
-                        "observaciones": obs_val,
-                        "ruta_fincas_ids": ",".join(ids_fin_ruta)
-                    }
-                    append_row_dict_safe(ws_ord, row)
-                    ws_ruta = sh.worksheet("Orden_Fincas")
-                    for idx,fid in enumerate(ids_fin_ruta):
-                        append_row_dict_safe(ws_ruta, {"id": f"{id_orden}-{fid}", "id_orden": id_orden, "id_finca": fid, "orden_visita": idx+1, "estado_carga": "PENDIENTE"})
-                    st.balloons()
-                    st.success(f"ORDEN {id_orden} Empresa {emp_nombre_principal}")
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+    ordenes_activas = df_ord[df_ord['estado'] == 'ABIERTA']['id_orden'].tolist()
+    sel_orden = st.selectbox("Seleccionar Orden para Empaque", ordenes_activas if ordenes_activas else ["Sin órdenes"])
 
-    if menu_sel == "✏️ Remision/Factura":
-        st.subheader("✏️ Editar Remision/Factura aunque carro ya se fue")
-        df_oc_edit,_=get_df_safe("OrdenesCarga")
-        if df_oc_edit.empty:
-            st.info("No hay ordenes - aqui aparecera para editar despues")
-        else:
-            ids = list(reversed(df_oc_edit['id_orden'].astype(str).tolist()))
-            sel = st.selectbox("Orden para editar", ids[:100], key="sel_edit_v5")
-            if sel:
-                fila = df_oc_edit[df_oc_edit['id_orden']==sel]
-                if not fila.empty:
-                    r=fila.iloc[0]
-                    st.write(f"{r.get('id_orden','')} | Lote {r.get('id_lote','')} | Rem {r.get('folio_remision','')} | Fac {r.get('folio_factura','')}")
-                    c1,c2,c3,c4 = st.columns(4)
-                    with c1: new_rem=st.text_input("Remision", value=str(r.get('folio_remision','') or ""), key="erem_v5")
-                    with c2: new_fac=st.text_input("Factura", value=str(r.get('folio_factura','') or ""), key="efac_v5")
-                    with c3: new_fac2=st.text_input("Factura2", value=str(r.get('folio_factura2','') or ""), key="efac2_v5")
-                    with c4: new_lote=st.text_input("Lote", value=str(r.get('id_lote','')), key="elote_v5")
-                    new_obs=st.text_area("Obs", value=str(r.get('observaciones','')), key="eobs_v5")
-                    if st.button("💾 GUARDAR", type="primary", use_container_width=True):
-                        try:
-                            ws=sh.worksheet("OrdenesCarga")
-                            ensure_columns_exist(ws, ["folio_remision","folio_factura","folio_factura2","id_lote","observaciones"])
-                            cell=ws.find(sel)
-                            headers=[str(h).strip() for h in ws.row_values(1)]
-                            def idx_col(name): return headers.index(name)+1 if name in headers else None
-                            if idx_col("folio_remision"): ws.update_cell(cell.row, idx_col("folio_remision"), new_rem)
-                            if idx_col("folio_factura"): ws.update_cell(cell.row, idx_col("folio_factura"), new_fac)
-                            if idx_col("folio_factura2"): ws.update_cell(cell.row, idx_col("folio_factura2"), new_fac2)
-                            if idx_col("id_lote"): ws.update_cell(cell.row, idx_col("id_lote"), new_lote)
-                            if idx_col("observaciones"): ws.update_cell(cell.row, idx_col("observaciones"), new_obs)
-                            st.success("Actualizada"); st.rerun()
-                        except Exception as e: st.error(str(e))
+    if sel_orden and sel_orden != "Sin órdenes":
+        with st.form("form_empaque"):
+            finca_actual = st.text_input("Nombre de Finca de Proceso actual")
+            cajas_procesadas = st.number_input("Cantidad de Cajas de banano empacadas", min_value=0, value=1000)
+            observaciones = st.text_area("Observaciones de Calidad")
 
-    if menu_sel == "🗺️ Seguimiento":
-        st.subheader("Seguimiento Ordenes-Fincas")
-        if not df_of.empty:
-            st.dataframe(df_of.tail(100), use_container_width=True)
-        else:
-            st.info("Sin recorridos")
+            if st.form_submit_button("Registrar Producción de Finca"):
+                db.append_row_dict("Empaque_Finca", {
+                    "id_empaque": f"EMP-{sel_orden}-{finca_actual}",
+                    "id_orden": sel_orden,
+                    "finca": finca_actual,
+                    "cajas": cajas_procesadas,
+                    "observaciones": observaciones,
+                    "fecha": datetime.datetime.now().isoformat()
+                })
+                st.success("¡Producción registrada correctamente para esta finca!")
 
-elif st.session_state.rol=="VIGILANCIA":
-    st.markdown(f"<h2 style='text-align:left;'>Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
-    df_of,_=get_df_safe("Orden_Fincas")
-    df_oc,_=get_df_safe("OrdenesCarga")
-    if df_of.empty: st.warning("No hay ordenes"); st.stop()
-    finca=st.session_state.finca_asignada
-    df_f=df_of if finca.upper()=="TODAS" else df_of[df_of['id_finca'].astype(str).str.upper()==finca.upper()]
-    st.metric("Pendientes", len(df_f[~df_f['estado_carga'].isin(['CARGADO_SALIO','EN_FINCA'])]))
-    for idx,row in df_f.iterrows():
-        id_ord=str(row['id_orden']).strip()
-        with st.container(border=True):
-            st.write(id_ord)
 
-else:
-    st.title(f"{st.session_state.rol} - {st.session_state.finca_asignada}")
+# =========================================================================
+# PUNTO DE ENTRADA PRINCIPAL Y NAVEGACIÓN POR ROLES
+# =========================================================================
+if __name__ == "__main__":
+    st.set_page_config(page_title="Sistema de Embarque Bananero", layout="wide")
+    db = BananoDB()
+
+    st.sidebar.title("Menú del Sistema")
+    rol = st.sidebar.selectbox("Seleccione Módulo / Rol", [
+        "Oficina Central", 
+        "Caseta de Vigilancia", 
+        "Planta Empacadora / Finca"
+    ])
+
+    st.sidebar.markdown("---")
+    st.sidebar.info("Sistema conectado a Google Sheets y Google Drive.")
+
+    if rol == "Oficina Central":
+        render_oficina_central_catalogos(db)
+    elif rol == "Caseta de Vigilancia":
+        render_caseta_vigilancia(db)
+    elif rol == "Planta Empacadora / Finca":
+        render_planta_empacadora(db)
