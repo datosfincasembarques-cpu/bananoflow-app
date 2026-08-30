@@ -799,11 +799,13 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al registrar salida: {e}")
-# --------------------------------------------------------------------------
+
+    # --------------------------------------------------------------------------
     # Sección 6.6: Seguimiento en Oficina Central
     # --------------------------------------------------------------------------
-    elif menu_sel == "Seguimiento":
+    elif menu_sel == "🗺️ Seguimiento":
         st.markdown("<h2 style='color: #2c3e50;'>📊 Seguimiento de Operaciones y Embarques</h2>", unsafe_allow_html=True)
+        st.caption("Consulta en tiempo real el estatus de las órdenes y el avance en las distintas fincas de la ruta.")
         
         try:
             _, sh, _ = get_db()
@@ -833,7 +835,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.info("ℹ️ No hay registros en la hoja Orden_Fincas.")
         except Exception as e:
             st.error(f"Error al cargar los datos de seguimiento: {e}")
-
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
