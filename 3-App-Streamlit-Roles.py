@@ -856,9 +856,63 @@ elif st.session_state.rol == "VIGILANCIA":
         st.markdown("<h3 style='color: #28a745;'>ENTRADA FINCA</h3>", unsafe_allow_html=True)
         
         lista_ocs = df_pendientes['id_orden'].astype(str).tolist() if not df_pendientes.empty else ["Sin OC pendientes"]
-        oc_sel = st.selectbox("OC:", lista_ocs, key="vis_oc_sel_rol")
+        oc_sel = st.selectbox("Seleccione la OC del Transporte:", lista_ocs, key="vis_oc_sel_rol")
         
-        placa_guia = st.text_input("Placa / Guía:", placeholder="Ej: 123-ABC / GT-8821", key="vis_placa_input_rol")
+        # Búsqueda cruzada de los detalles en la tabla matriz de órdenes
+        info_orden = {}
+        if oc_sel != "Sin OC pendientes":
+            try:
+                _, sh_db, _ = get_db()
+                for nombre_hoja in ["OrdenesCarga", "Embarques", "Control_Embarques", "Ordenes"]:
+                    try:
+                        ws_gen = sh_db.worksheet(nombre_hoja)
+                        df_gen = pd.DataFrame(ws_gen.get_all_records())
+                        if not df_gen.empty:
+                            cols_posibles = [c for c in df_gen.columns if 'orden' in c.lower() or 'oc' in c.lower()]
+                            for col in cols_posibles:
+                                match_gen = df_gen[df_gen[col].astype(str) == str(oc_sel)]
+                                if not match_gen.empty:
+                                    info_orden = match_gen.iloc[0].to_dict()
+                                    break
+                        if info_orden: break
+                    except:
+                        continue
+            except:
+                pass
+            
+            if not info_orden and not df_pendientes.empty:
+                match_row = df_pendientes[df_pendientes['id_orden'].astype(str) == str(oc_sel)]
+                if not match_row.empty:
+                    info_orden = match_row.iloc[0].to_dict()
+
+        transportista = "No especificado"
+        operador = "No especificado"
+        caja_info = "No especificado"
+        
+        for k, v in info_orden.items():
+            k_lower = k.lower()
+            if any(term in k_lower for term in ['linea', 'transportista', 'transporte']):
+                transportista = str(v)
+            elif any(term in k_lower for term in ['chofer', 'operador', 'conductor']):
+                operador = str(v)
+            elif any(term in k_lower for term in ['caja', 'tractor', 'placa', 'unidad', 'equipo']):
+                caja_info = str(v)
+
+        # Recuadro visual para corroboración en caseta
+        st.markdown(
+            f"""
+            <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #28a745; margin-bottom: 15px;'>
+                <p style='margin: 0; font-weight: bold; color: #28a745; font-size: 16px;'>🔍 Datos para Corroboración en Caseta:</p>
+                <hr style='margin: 6px 0;'>
+                <p style='margin: 4px 0;'><b>🏢 Línea / Transportista:</b> {transportista}</p>
+                <p style='margin: 4px 0;'><b>👤 Operador / Chofer:</b> {operador}</p>
+                <p style='margin: 4px 0;'><b>🚛 Unidad / Caja Asignada:</b> {caja_info}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        placa_guia = st.text_input("Placa / Guía Física Verificada en Unidad:", placeholder="Ej: 123-ABC / GT-8821", key="vis_placa_input_rol")
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div style='border: 2px dashed #28a745; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
@@ -874,7 +928,7 @@ elif st.session_state.rol == "VIGILANCIA":
         
         if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_rol"):
             if not placa_guia:
-                st.error("⚠️ Debe ingresar la Placa o Guía del vehículo.")
+                st.error("⚠️ Debe ingresar la Placa o Guía física del vehículo para validar el acceso.")
             else:
                 try:
                     _, sh, _ = get_db()
@@ -891,7 +945,7 @@ elif st.session_state.rol == "VIGILANCIA":
                         "foto_tractor_placa_url": "CARGADA" if foto_tractor is not None else "PENDIENTE",
                         "foto_caja_placa_url": "CARGADA" if foto_caja is not None else "PENDIENTE",
                         "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                        "observaciones": f"Placa/Guía: {placa_guia}"
+                        "observaciones": f"Placa física: {placa_guia} | Op: {operador}"
                     }
                     
                     ensure_columns_exist(ws_v, list(dict_reg.keys()))
