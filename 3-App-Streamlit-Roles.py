@@ -15,12 +15,6 @@ st.set_page_config(page_title="Control Operativo - Embarques V5", layout="wide",
 # ==============================================================================
 # 2. CONEXIÓN Y CARGA SEGURA DE DATOS (CON CACHÉ Y PROTECCIÓN CONTRA LÍMITE 429)
 # ==============================================================================
-import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-import time
-
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
 
@@ -37,7 +31,7 @@ def get_db():
     drive_service = build('drive', 'v3', credentials=creds)
     return client, sh, drive_service
 
-@st.cache_data(ttl=60) # Guarda en caché por 60 segundos para evitar saturar la API de Google (Error 429)
+@st.cache_data(ttl=60)
 def get_df_safe_cached(sheet_name):
     intentos = 0
     max_retries = 3
@@ -78,12 +72,10 @@ def get_df_safe_cached(sheet_name):
     return pd.DataFrame(dtype=str)
 
 def get_df_safe(sheet_name, max_retries=3):
-    """Devuelve una tupla (df, None) para mantener compatibilidad con asignaciones dobles."""
     df = get_df_safe_cached(sheet_name)
     return df, None
 
 def ensure_columns_exist(worksheet, required_columns):
-    """Verifica que las columnas existan en la hoja de Google Sheets, si no, las crea."""
     try:
         header_row = worksheet.row_values(1)
         header_row_cleaned = [str(h).strip() for h in header_row]
@@ -96,7 +88,6 @@ def ensure_columns_exist(worksheet, required_columns):
         pass
 
 def append_row_dict_safe(worksheet, row_dict):
-    """Inserta un diccionario como fila respetando el orden de las columnas de la cabecera."""
     try:
         header_row = worksheet.row_values(1)
         header_row_cleaned = [str(h).strip() for h in header_row]
@@ -112,7 +103,6 @@ def append_row_dict_safe(worksheet, row_dict):
         st.error(f"Error al guardar en Google Sheets: {e}")
         return False
 
-# Inicialización segura de variables globales de estado de conexión
 try:
     _, _, _ = get_db()
     conectado = True
@@ -281,6 +271,7 @@ def lista_placas_no_concat(df):
         mapa[idv] = r.to_dict()
     return sorted(lista), mapa
 
+
 # ==============================================================================
 # 6. CUERPO PRINCIPAL - ROL: OFICINA CENTRAL
 # ==============================================================================
@@ -388,14 +379,25 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         cli_nombres, cli_mapa = lista_simple_no_concat(df_cli, "id_cliente", "razon_social")
         des_nombres, des_mapa = lista_simple_no_concat(df_des, "id_destino", "ciudad")
 
+        col_sw1, col_sw2 = st.columns([3, 1])
+        with col_sw1:
+            st.markdown("##### Configuración de Arrastre")
+        with col_sw2:
+            modo_full = st.toggle("Configuración Full (Doble Caja)", value=False, key="toggle_full_hibrido")
+
         ct1, ct2, ct3 = st.columns(3)
         with ct1:
             st.markdown("**Tracto**")
             tr_placa_sel = st.selectbox("Placa Tracto", tr_placas if tr_placas else ["No hay"], key="tr_placa_hibrido", label_visibility="collapsed")
             tr_data = tr_mapa_placa.get(tr_placa_sel, {})
             id_tr = str(tr_data.get('id_tractor', '') or tr_placa_sel)
+            placa_str = str(tr_data.get('placas', '') or tr_placa_sel)
+            linea_tractor_id = str(tr_data.get('id_linea', '') or id_lin)
+            
             st.text_input("ID Tracto", value=id_tr, disabled=True, key="id_tr_hibrido")
-            st.text_input("Placas", value=str(tr_data.get('placas', '') or tr_placa_sel), disabled=True, key="placa_tr_hibrido")
+            st.text_input("Placas", value=placa_str, disabled=True, key="placa_tr_hibrido")
+            st.text_input("Línea Asignada", value=linea_tractor_id, disabled=True, key="linea_tr_hibrido")
+
         with ct2:
             st.markdown("**Caja 1**")
             cj1_placa_sel = st.selectbox("Placa Caja1", cj_placas if cj_placas else ["No hay"], key="cj1_placa_hibrido", label_visibility="collapsed")
@@ -403,16 +405,20 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             id_cj1 = str(cj1_data.get('id_caja', '') or cj1_placa_sel)
             st.text_input("ID Caja1", value=id_cj1, disabled=True, key="id_cj1_hibrido")
             st.text_input("Placa Caja1", value=str(cj1_data.get('placas', '') or cj1_placa_sel), disabled=True, key="placa_cj1_hibrido")
+            st.markdown("")
+
         with ct3:
-            st.markdown("**Caja 2 (Full opcional)**")
-            cj2_placa_sel = st.selectbox("Caja2", ["(Vacío - Sencillo)"] + cj_placas, key="cj2_placa_hibrido", label_visibility="collapsed")
-            if cj2_placa_sel != "(Vacío - Sencillo)":
+            if modo_full:
+                st.markdown("**Caja 2 (Full Activo)**")
+                cj2_placa_sel = st.selectbox("Caja2", cj_placas if cj_placas else ["No hay"], key="cj2_placa_hibrido", label_visibility="collapsed")
                 cj2_data = cj_mapa_placa.get(cj2_placa_sel, {})
                 id_cj2 = str(cj2_data.get('id_caja', '') or cj2_placa_sel)
                 st.text_input("ID Caja2", value=id_cj2, disabled=True, key="id_cj2_hibrido")
+                st.text_input("Placa Caja2", value=str(cj2_data.get('placas', '') or cj2_placa_sel), disabled=True, key="placa_cj2_hibrido")
             else:
                 id_cj2 = ""
-                st.text_input("ID Caja2", value="N/A", disabled=True, key="id_cj2_vacio")
+                st.markdown("**Caja 2 (Sencillo)**")
+                st.info("🔒 Modo Sencillo activo. Active el interruptor superior si requiere configuración Full.")
 
         st.markdown("### 📄 Documentación y Destino")
         r1, r2, r3, r4 = st.columns(4)
@@ -446,7 +452,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     id_orden = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op}"
                     ws_ord = sh.worksheet("OrdenesCarga")
                     
-                    # Aseguramos exactamente la estructura proporcionada para OrdenesCarga
                     ensure_columns_exist(ws_ord, [
                         "id_orden", "folio_orden", "fecha_creacion", "id_usuario_crea", 
                         "id_operador", "id_tractor", "id_caja1", "id_caja2", "id_linea", 
@@ -476,7 +481,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     if append_row_dict_safe(ws_ord, row):
                         ws_ruta = sh.worksheet("Orden_Fincas")
                         
-                        # Aseguramos la estructura para Orden_Fincas con cajas_asignadas
                         ensure_columns_exist(ws_ruta, ["id", "id_orden", "id_finca", "orden_visita", "estado_carga", "cajas_asignadas"])
                         
                         for idx, fid in enumerate(ids_fin_ruta):
