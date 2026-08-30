@@ -28,9 +28,14 @@ class BananoDB:
                 creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
 
         self.client = gspread.authorize(creds)
-        self.sh = self.client.open(spreadsheet_name)
         self.drive_service = build('drive', 'v3', credentials=creds)
         self.drive_folder_id = drive_folder_id
+        
+        try:
+            self.sh = self.client.open(spreadsheet_name)
+        except Exception as e:
+            st.error(f"⚠️ Error al conectar con Google Sheets ('{spreadsheet_name}'). Verifica que la cuenta de servicio tenga acceso de Editor y que el nombre sea exacto. Detalle: {e}")
+            st.stop()
 
     def get_df(self, sheet_name):
         try:
