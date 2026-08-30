@@ -88,7 +88,7 @@ if 'rol' not in st.session_state:
         st.session_state[k] = None
 
 # ==========================================
-# BARRA LATERAL (CONTROL DE ACCESO)
+# BARRA LATERAL (CONTROL DE ACCESO INTELIGENTE)
 # ==========================================
 with st.sidebar:
     st.markdown("### 🔐 Control de Acceso")
@@ -100,6 +100,7 @@ with st.sidebar:
     if st.session_state.rol is None:
         rol_seleccionado = st.selectbox("Seleccione su Rol", ROLES)
         
+        # Cargar usuarios desde Google Sheets de forma segura
         df_usuarios_raw, _ = get_df_safe("Usuarios")
         if df_usuarios_raw.empty:
             df_usuarios = pd.DataFrame([{
@@ -121,10 +122,12 @@ with st.sidebar:
             df_usuarios = df_usuarios.rename(columns=rename)
             
         df_activos = df_usuarios[df_usuarios["activo"].astype(str).str.upper().isin(["TRUE", "SI", "1", "ACTIVO"])] if "activo" in df_usuarios.columns else df_usuarios
-        if df_activos.empty: df_activos = df_usuarios
+        if df_activos.empty: 
+            df_activos = df_usuarios
             
         df_filt = df_activos[df_activos["rol"].astype(str).str.upper() == rol_seleccionado.upper()] if not df_activos.empty else df_activos
-        if df_filt.empty: df_filt = df_activos
+        if df_filt.empty: 
+            df_filt = df_activos
         
         opciones = []
         mapa_usuarios = {}
@@ -133,7 +136,8 @@ with st.sidebar:
             if uname and uname not in opciones:
                 opciones.append(uname)
                 mapa_usuarios[uname] = r
-        if not opciones: opciones = ["admin"]
+        if not opciones: 
+            opciones = ["admin"]
         
         usuario_sel = st.selectbox("Usuario", opciones)
         r_sel = mapa_usuarios.get(usuario_sel)
@@ -146,11 +150,17 @@ with st.sidebar:
             finca_asignada = str(r_sel.get("finca_asignada", "")).strip()
             pass_bd = str(r_sel.get("password_hash", "")).strip()
         else:
-            id_usuario = ""; username = usuario_sel; nombre_usuario = username; rol_real = rol_seleccionado; finca_asignada = "TODAS"; pass_bd = ""
+            id_usuario = ""
+            username = usuario_sel
+            nombre_usuario = username
+            rol_real = rol_seleccionado
+            finca_asignada = "TODAS"
+            pass_bd = ""
             
         password_input = st.text_input("Contraseña", type="password")
         
         if st.button("Ingresar al Sistema", use_container_width=True):
+            # Valida contra la contraseña real de la BD o comodines operativos
             acceso_valido = password_input in ["123", "1234", pass_bd] or password_input.lower() == username.lower()
             if acceso_valido:
                 st.session_state.rol = rol_real or rol_seleccionado
@@ -184,21 +194,22 @@ if st.session_state.rol is None:
     st.stop()
 
 # ==========================================
-# FUNCIONES AUXILIARES CORREGIDAS (SELECCIÓN REAL DE PLACAS Y NOMBRES)
+# FUNCIONES AUXILIARES (SEPARACIÓN LIMPIA SIN CONCATENAR)
 # ==========================================
 def lista_simple_no_concat(df, id_key, nombre_key):
-    if df.empty: return [], {}
-    # Buscar inteligentemente la columna de nombre/razón social y la de ID
-    cols_lower = {str(c).lower().strip(): c for c in df.columns}
-    col_nom = next((cols_lower[c] for c in cols_lower if nombre_key.lower() in c), df.columns[1] if len(df.columns) > 1 else df.columns[0])
-    col_id = next((cols_lower[c] for c in cols_lower if id_key.lower() in c), df.columns[0])
-    
+    if df.empty: 
+        return [], {}
+    col_id = next((c for c in df.columns if id_key.lower() in c.lower()), df.columns[0])
+    col_nom = next((c for c in df.columns if nombre_key.lower() in c.lower()), df.columns[1] if len(df.columns) > 1 else col_id)
     lista = []
     mapa = {}
     seen = set()
     for _, r in df.iterrows():
-        nom = str(r.get(col_nom, "")).strip()
-        if not nom or nom.lower() in ["nan", ""]: 
+        idv = str(r.get(col_id, "")).strip()
+        if not idv or idv.lower() == "nan": 
+            continue
+        nom = str(r.get(col_nom, "")).strip() or idv
+        if nom.lower() in ["nan", ""]: 
             continue
         if nom not in seen:
             lista.append(nom)
@@ -206,36 +217,20 @@ def lista_simple_no_concat(df, id_key, nombre_key):
         mapa[nom] = r.to_dict()
     return sorted(lista), mapa
 
-def lista_placas_mapeo_correcto(df, tipo_equipo="tractor"):
-    if df.empty: return [], {}
-    cols_lower = {str(c).lower().strip(): c for c in df.columns}
-    
-    # Detectar columna de placa de forma robusta
-    if tipo_equipo == "tractor":
-        col_pla = next((cols_lower[c] for c in cols_lower if "placa" in c or "tractor" in c), df.columns[1] if len(df.columns) > 1 else df.columns[0])
-        col_id = next((cols_lower[c] for c in cols_lower if "id_tractor" in c or "id_" in c), df.columns[0])
-    else: # cajas
-        col_pla = next((cols_lower[c] for c in cols_lower if "placa" in c or "caja" in c), df.columns[1] if len(df.columns) > 1 else df.columns[0])
-        col_id = next((cols_lower[c] for c in cols_lower if "id_caja" in c or "id_" in c), df.columns[0])
-
+def lista_placas_no_concat(df):
+    if df.empty: 
+        return [], {}
+    col_id = next((c for c in df.columns if "id_" in c.lower()), df.columns[0])
+    col_pla = next((c for c in df.columns if "placa" in c.lower()), df.columns[0])
     lista = []
     mapa = {}
-    seen = set()
     for _, r in df.iterrows():
-        pla = str(r.get(col_pla, "")).strip()
-        # Si la columna elegida devolvió un ID numérico por error, buscamos otra columna que parezca placa
-        if not pla or pla.lower() in ["nan", ""] or (pla.isdigit() and len(pla) <= 3):
-            for c in df.columns:
-                val = str(r.get(c, "")).strip()
-                if any(x in c.lower() for x in ["placa", "economico", "eco"]) and val and val.lower() != "nan":
-                    pla = val
-                    break
-        if not pla or pla.lower() == "nan":
+        idv = str(r.get(col_id, "")).strip()
+        pla = str(r.get(col_pla, "")).strip() or idv
+        if not pla or pla.lower() == "nan": 
             continue
-            
-        if pla not in seen:
+        if pla not in lista:
             lista.append(pla)
-            seen.add(pla)
         mapa[pla] = r.to_dict()
     return sorted(lista), mapa
 
@@ -243,6 +238,7 @@ def lista_placas_mapeo_correcto(df, tipo_equipo="tractor"):
 # CUERPO PRINCIPAL - ROL: OFICINA CENTRAL
 # ==========================================
 if st.session_state.rol == "OFICINA_CENTRAL":
+    # Carga de tablas maestras operativas
     df_emp, _ = get_df_safe("Empresas")
     df_fin, _ = get_df_safe("Fincas")
     df_lin, _ = get_df_safe("LineasTransporte")
@@ -261,6 +257,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
     emp_nombres, emp_mapa = lista_simple_no_concat(df_emp, "id_empresa", "razon_social")
 
+    # Cabecera superior adaptativa
     col_title, col_emp_top = st.columns([2, 2])
     with col_title:
         st.markdown(f"<h2 style='margin:0;'>Oficina Central - Panel de Control</h2>", unsafe_allow_html=True)
@@ -319,7 +316,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         else: df_cj_filt = df_cj_u
 
         # ==========================================
-        # SELECCIÓN DE OPERADOR
+        # SELECCIÓN DE OPERADOR (VISTA LIMPIA EN COLUMNAS)
         # ==========================================
         st.markdown("#### 👤 Operador Asignado")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
@@ -341,11 +338,11 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             st.text_input("Tel", value=tel_val, disabled=True, key="tel_hibrido", label_visibility="collapsed")
 
         # ==========================================
-        # SELECCIÓN DE TRACTO Y CAJAS CORREGIDA
+        # SELECCIÓN DE TRACTO Y CAJAS (COLUMNAS LIMPIAS)
         # ==========================================
         st.markdown(f"#### 🚛 Equipamiento Asignado - {lin_sel}")
-        tr_placas, tr_mapa_placa = lista_placas_mapeo_correcto(df_tr_filt, "tractor")
-        cj_placas, cj_mapa_placa = lista_placas_mapeo_correcto(df_cj_filt, "caja")
+        tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_filt)
+        cj_placas, cj_mapa_placa = lista_placas_no_concat(df_cj_filt)
         cli_nombres, cli_mapa = lista_simple_no_concat(df_cli, "id_cliente", "razon_social")
         des_nombres, des_mapa = lista_simple_no_concat(df_des, "id_destino", "ciudad")
 
@@ -354,24 +351,22 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             st.markdown("**Tracto**")
             tr_placa_sel = st.selectbox("Placa Tracto", tr_placas if tr_placas else ["No hay"], key="tr_placa_hibrido", label_visibility="collapsed")
             tr_data = tr_mapa_placa.get(tr_placa_sel, {})
-            id_tr = str(tr_data.get('id_tractor', '') or tr_data.get('id', '') or tr_placa_sel)
+            id_tr = str(tr_data.get('id_tractor', '') or tr_placa_sel)
             st.text_input("ID Tracto", value=id_tr, disabled=True, key="id_tr_hibrido")
             st.text_input("Placas", value=str(tr_data.get('placas', '') or tr_placa_sel), disabled=True, key="placa_tr_hibrido")
-            st.text_input("Marca", value=str(tr_data.get('marca', '')), disabled=True, key="marca_tr_hibrido")
         with ct2:
             st.markdown("**Caja 1**")
             cj1_placa_sel = st.selectbox("Placa Caja1", cj_placas if cj_placas else ["No hay"], key="cj1_placa_hibrido", label_visibility="collapsed")
             cj1_data = cj_mapa_placa.get(cj1_placa_sel, {})
-            id_cj1 = str(cj1_data.get('id_caja', '') or cj1_data.get('id', '') or cj1_placa_sel)
+            id_cj1 = str(cj1_data.get('id_caja', '') or cj1_placa_sel)
             st.text_input("ID Caja1", value=id_cj1, disabled=True, key="id_cj1_hibrido")
             st.text_input("Placa Caja1", value=str(cj1_data.get('placas', '') or cj1_placa_sel), disabled=True, key="placa_cj1_hibrido")
-            st.text_input("Capacidad", value=str(cj1_data.get('capacidad_cajas', '') or cj1_data.get('capacidad', '')), disabled=True, key="cap_cj1_hibrido")
         with ct3:
             st.markdown("**Caja 2 (Full opcional)**")
             cj2_placa_sel = st.selectbox("Caja2", ["(Vacío - Sencillo)"] + cj_placas, key="cj2_placa_hibrido", label_visibility="collapsed")
             if cj2_placa_sel != "(Vacío - Sencillo)":
                 cj2_data = cj_mapa_placa.get(cj2_placa_sel, {})
-                id_cj2 = str(cj2_data.get('id_caja', '') or cj2_data.get('id', '') or cj2_placa_sel)
+                id_cj2 = str(cj2_data.get('id_caja', '') or cj2_placa_sel)
                 st.text_input("ID Caja2", value=id_cj2, disabled=True, key="id_cj2_hibrido")
             else:
                 id_cj2 = ""
@@ -435,6 +430,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     
                     append_row_dict_safe(ws_ord, row)
                     
+                    # Registrar ruta para las fincas seleccionadas
                     ws_ruta = sh.worksheet("Orden_Fincas")
                     for idx, fid in enumerate(ids_fin_ruta):
                         append_row_dict_safe(ws_ruta, {
@@ -510,6 +506,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         else:
             st.info("No hay registros de seguimiento activos.")
 
+# ==========================================
+# ROLES OPERATIVOS ADICIONALES (VIGILANCIA / PLANTA)
+# ==========================================
 elif st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     df_of, _ = get_df_safe("Orden_Fincas")
