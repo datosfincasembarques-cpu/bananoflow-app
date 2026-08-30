@@ -82,6 +82,36 @@ def get_df_safe(sheet_name, max_retries=3):
     df = get_df_safe_cached(sheet_name)
     return df, None
 
+def ensure_columns_exist(worksheet, required_columns):
+    """Verifica que las columnas existan en la hoja de Google Sheets, si no, las crea."""
+    try:
+        header_row = worksheet.row_values(1)
+        header_row_cleaned = [str(h).strip() for h in header_row]
+        nuevas = [col for col in required_columns if col not in header_row_cleaned]
+        if nuevas:
+            next_col = len(header_row) + 1
+            for i, col in enumerate(nuevas):
+                worksheet.update_cell(1, next_col + i, col)
+    except Exception:
+        pass
+
+def append_row_dict_safe(worksheet, row_dict):
+    """Inserta un diccionario como fila respetando el orden de las columnas de la cabecera."""
+    try:
+        header_row = worksheet.row_values(1)
+        header_row_cleaned = [str(h).strip() for h in header_row]
+        if not header_row_cleaned:
+            headers = list(row_dict.keys())
+            worksheet.append_row(headers)
+            header_row_cleaned = headers
+            
+        row_values = [str(row_dict.get(h, "")) for h in header_row_cleaned]
+        worksheet.append_row(row_values)
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar en Google Sheets: {e}")
+        return False
+
 # Inicialización segura de variables globales de estado de conexión
 try:
     _, _, _ = get_db()
@@ -93,6 +123,7 @@ except Exception as e:
 
 if "conectado" not in st.session_state:
     st.session_state.conectado = conectado    
+
 
 # ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
@@ -410,33 +441,33 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.warning("⚠️ Debe seleccionar un tracto y una caja válidos.")
             else:
                 try:
-                    # Obtenemos la conexión de base de datos de manera segura dentro del botón
                     _, sh, _ = get_db()
                     
                     id_orden = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op}"
                     ws_ord = sh.worksheet("OrdenesCarga")
-                    ensure_columns_exist(ws_ord, ["id_empresa_expedidora", "empresa_nombre", "id_finca_guia_titular", "id_linea", "linea_nombre", "folio_remision", "folio_factura", "folio_factura2", "id_lote", "observaciones", "ruta_fincas_ids"])
+                    
+                    # Aseguramos exactamente la estructura proporcionada para OrdenesCarga
+                    ensure_columns_exist(ws_ord, [
+                        "id_orden", "folio_orden", "fecha_creacion", "id_usuario_crea", 
+                        "id_operador", "id_tractor", "id_caja1", "id_caja2", "id_linea", 
+                        "id_cliente", "id_destino", "id_lote", "folio_factura", 
+                        "estado", "observaciones", "ruta_fincas_ids"
+                    ])
                     
                     row = {
                         "id_orden": id_orden,
                         "folio_orden": id_orden,
                         "fecha_creacion": datetime.now().isoformat(),
                         "id_usuario_crea": st.session_state.username,
-                        "id_empresa_expedidora": id_emp_principal,
-                        "empresa_nombre": emp_nombre_principal,
-                        "id_finca_guia_titular": id_fin_guia,
                         "id_operador": id_op,
                         "id_tractor": id_tr,
                         "id_caja1": id_cj1,
                         "id_caja2": id_cj2,
                         "id_linea": id_lin,
-                        "linea_nombre": lin_sel,
                         "id_cliente": id_cli,
                         "id_destino": id_des,
                         "id_lote": lote_val if lote_val else f"LOTE-{id_orden}",
-                        "folio_remision": rem_val,
                         "folio_factura": fac_val,
-                        "folio_factura2": fac2_val,
                         "estado": "ABIERTA",
                         "observaciones": obs_val,
                         "ruta_fincas_ids": ",".join(ids_fin_ruta)
@@ -444,13 +475,18 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     
                     if append_row_dict_safe(ws_ord, row):
                         ws_ruta = sh.worksheet("Orden_Fincas")
+                        
+                        # Aseguramos la estructura para Orden_Fincas con cajas_asignadas
+                        ensure_columns_exist(ws_ruta, ["id", "id_orden", "id_finca", "orden_visita", "estado_carga", "cajas_asignadas"])
+                        
                         for idx, fid in enumerate(ids_fin_ruta):
                             append_row_dict_safe(ws_ruta, {
                                 "id": f"{id_orden}-{fid}", 
                                 "id_orden": id_orden, 
                                 "id_finca": fid, 
                                 "orden_visita": idx + 1, 
-                                "estado_carga": "PENDIENTE"
+                                "estado_carga": "PENDIENTE",
+                                "cajas_asignadas": ""
                             })
                             
                         st.balloons()
@@ -470,7 +506,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             with colm3: st.metric("En Ruta", len(df_of) if not df_of.empty else 0)
             with colm4: st.metric("Cerradas", len(df_oc[df_oc['estado'].astype(str).str.upper() == 'CERRADA']) if 'estado' in df_oc.columns else 0)
             
-            cols_show = [c for c in ["id_orden", "empresa_nombre", "id_finca_guia_titular", "id_operador", "id_tractor", "id_caja1", "id_lote", "folio_remision", "folio_factura", "estado", "fecha_creacion"] if c in df_oc.columns]
+            cols_show = [c for c in ["id_orden", "id_operador", "id_tractor", "id_caja1", "id_lote", "folio_factura", "estado", "fecha_creacion"] if c in df_oc.columns]
             df_show = df_oc.tail(20).iloc[::-1]
             st.dataframe(df_show[cols_show] if cols_show else df_show, use_container_width=True)
         else:
@@ -480,7 +516,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     # 6.3 Submódulo: ✏️ Remisión/Factura
     # --------------------------------------------------------------------------
     elif menu_sel == "✏️ Remisión/Factura":
-        st.subheader("✏️ Edición Rápida de Remisiones y Facturas")
+        st.subheader("✏️ Edición Rápida de Facturas y Lotes")
         df_oc_edit, _ = get_df_safe("OrdenesCarga")
         if df_oc_edit.empty:
             st.info("No hay órdenes disponibles para editar.")
@@ -491,11 +527,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 fila = df_oc_edit[df_oc_edit['id_orden'] == sel_orden]
                 if not fila.empty:
                     r = fila.iloc[0]
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1: new_rem = st.text_input("Remisión", value=str(r.get('folio_remision', '')), key="erem_h")
-                    with c2: new_fac = st.text_input("Factura", value=str(r.get('folio_factura', '')), key="efac_h")
-                    with c3: new_fac2 = st.text_input("Factura 2", value=str(r.get('folio_factura2', '')), key="efac2_h")
-                    with c4: new_lote = st.text_input("Lote", value=str(r.get('id_lote', '')), key="elote_h")
+                    c1, c2 = st.columns(2)
+                    with c1: new_fac = st.text_input("Factura", value=str(r.get('folio_factura', '')), key="efac_h")
+                    with c2: new_lote = st.text_input("Lote", value=str(r.get('id_lote', '')), key="elote_h")
                     
                     new_obs = st.text_area("Observaciones", value=str(r.get('observaciones', '')), key="eobs_h")
                     
@@ -507,9 +541,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             headers = [str(h).strip() for h in ws.row_values(1)]
                             def idx_col(name): return headers.index(name) + 1 if name in headers else None
                             
-                            if idx_col("folio_remision"): ws.update_cell(cell.row, idx_col("folio_remision"), new_rem)
                             if idx_col("folio_factura"): ws.update_cell(cell.row, idx_col("folio_factura"), new_fac)
-                            if idx_col("folio_factura2"): ws.update_cell(cell.row, idx_col("folio_factura2"), new_fac2)
                             if idx_col("id_lote"): ws.update_cell(cell.row, idx_col("id_lote"), new_lote)
                             if idx_col("observaciones"): ws.update_cell(cell.row, idx_col("observaciones"), new_obs)
                             
