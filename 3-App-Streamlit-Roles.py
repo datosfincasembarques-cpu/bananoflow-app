@@ -476,12 +476,13 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
 
-    # --------------------------------------------------------------------------
-    # 6.3 Submódulo: ✏️ Remisión/Factura
+   # --------------------------------------------------------------------------
+    # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
     elif menu_sel == "✏️ Remisión/Factura":
-        st.subheader("✏️ Edición Rápida de Factura, Remisión y Lotes")
+        st.subheader("✏️ Edición de Factura, Remisión y Lotes por Finca")
         df_oc_edit, _ = get_df_safe("OrdenesCarga")
+        df_of_edit, _ = get_df_safe("Orden_Fincas")
         
         if df_oc_edit.empty:
             st.info("No hay órdenes disponibles para editar.")
@@ -509,21 +510,42 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     id_linea_raw = str(r.get('id_linea', r.get('linea_transporte', ''))).strip()
                     id_caja1_raw = str(r.get('id_caja1', r.get('caja', ''))).strip()
 
-                    # Resolver nombre o ID de la finca
-                    id_finca_raw = str(r.get('id_finca', r.get('finca', r.get('ruta_fincas_ids', 'N/D')))).strip()
-                    nombre_finca = id_finca_raw
+                    # Buscar las fincas asociadas a esta orden en Orden_Fincas o en la orden
+                    fincas_de_orden = []
+                    if not df_of_edit.empty and 'id_orden' in df_of_edit.columns:
+                        match_fincas_ord = df_of_edit[df_of_edit['id_orden'].astype(str).str.strip().str.upper() == str(sel_orden).upper()]
+                        if not match_fincas_ord.empty:
+                            fincas_de_orden = match_fincas_ord['id_finca'].astype(str).tolist()
                     
-                    if not df_fin.empty and id_finca_raw and id_finca_raw != 'N/D':
-                        primer_id_finca = id_finca_raw.split(',')[0].strip()
-                        col_id_fin = next((c for c in df_fin.columns if 'id' in c.lower()), df_fin.columns[0])
-                        col_nom_fin = next((c for c in df_fin.columns if 'nombre' in c.lower() or 'razon' in c.lower()), df_fin.columns[1] if len(df_fin.columns) > 1 else col_id_fin)
-                        
-                        match_fin = df_fin[df_fin[col_id_fin].astype(str).str.strip().str.upper() == primer_id_finca.upper()]
-                        if not match_fin.empty:
-                            nombre_finca = str(match_fin.iloc[0].get(col_nom_fin, primer_id_finca))
-                        else:
-                            nombre_finca = primer_id_finca
+                    if not fincas_de_orden:
+                        fallback_finca = str(r.get('id_finca', r.get('ruta_fincas_ids', 'N/D'))).strip()
+                        fincas_de_orden = [f.strip() for f in fallback_finca.split(',') if f.strip()]
 
+                    # Mapeo de nombres de fincas para el selector
+                    finca_opciones = {}
+                    for fid in fincas_de_orden:
+                        nombre_f = fid
+                        if not df_fin.empty:
+                            col_id_fin = next((c for c in df_fin.columns if 'id' in c.lower()), df_fin.columns[0])
+                            col_nom_fin = next((c for c in df_fin.columns if 'nombre' in c.lower() or 'razon' in c.lower()), df_fin.columns[1] if len(df_fin.columns) > 1 else col_id_fin)
+                            match_f = df_fin[df_fin[col_id_fin].astype(str).str.strip().str.upper() == fid.upper()]
+                            if not match_f.empty:
+                                nombre_f = str(match_f.iloc[0].get(col_nom_fin, fid))
+                        finca_opciones[nombre_f] = fid
+
+                    st.markdown("##### 📍 Seleccione la Finca de la Ruta a Modificar")
+                    finca_sel_nombre = st.selectbox("Finca Participante", list(finca_opciones.keys()), key="sel_finca_ruta_edit")
+                    id_finca_activa = finca_opciones.get(finca_sel_nombre, fincas_de_orden[0] if fincas_de_orden else "")
+
+                    # Extraer datos específicos de esa finca desde Orden_Fincas si existen
+                    reg_finca_actual = {}
+                    if not df_of_edit.empty:
+                        m_rf = df_of_edit[(df_of_edit['id_orden'].astype(str).str.strip().str.upper() == str(sel_orden).upper()) & 
+                                          (df_of_edit['id_finca'].astype(str).str.strip().str.upper() == str(id_finca_activa).upper())]
+                        if not m_rf.empty:
+                            reg_finca_actual = m_rf.iloc[0].to_dict()
+
+                    # Resolver descripciones generales de operador, unidad, etc.
                     nombre_operador = id_operador_raw or "No especificado"
                     if not df_op_m.empty and id_operador_raw:
                         for _, row_op in df_op_m.iterrows():
@@ -570,9 +592,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     st.markdown(
                         f"""
                         <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #ffc107; margin-bottom: 15px;'>
-                            <p style='margin: 0; font-weight: bold; color: #856404; font-size: 16px;'>🔍 Datos de la Orden y Transporte:</p>
+                            <p style='margin: 0; font-weight: bold; color: #856404; font-size: 16px;'>🔍 Datos de la Orden y Finca Seleccionada:</p>
                             <hr style='margin: 6px 0;'>
-                            <p style='margin: 4px 0;'><b>🏢 Finca:</b> {nombre_finca}</p>
+                            <p style='margin: 4px 0;'><b>🏢 Finca Activa:</b> {finca_sel_nombre} ({id_finca_activa})</p>
                             <p style='margin: 4px 0;'><b>👤 Operador:</b> {nombre_operador}</p>
                             <p style='margin: 4px 0;'><b>🚛 Unidad:</b> {desc_tractor} | <b>Placas:</b> {placas_tractor}</p>
                             <p style='margin: 4px 0;'><b>📦 Caja:</b> {desc_caja}</p>
@@ -584,38 +606,62 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     
                     c1, c2, c3 = st.columns(3)
                     with c1: 
-                        new_fac = st.text_input("Número de Factura", value=str(r.get('folio_factura', r.get('factura', ''))), key="efac_h")
+                        def_fac = reg_finca_actual.get('folio_factura', reg_finca_actual.get('factura', r.get('folio_factura', r.get('factura', ''))))
+                        new_fac = st.text_input("Número de Factura (Finca)", value=str(def_fac), key="efac_finca_h")
                     with c2: 
-                        new_rem = st.text_input("Número de Remisión", value=str(r.get('remision', '')), key="erem_h")
+                        def_rem = reg_finca_actual.get('remision', r.get('remision', ''))
+                        new_rem = st.text_input("Número de Remisión (Finca)", value=str(def_rem), key="erem_finca_h")
                     with c3: 
-                        new_lote = st.text_input("Número de Lote", value=str(r.get('id_lote', r.get('lote', ''))), key="elote_h")
+                        def_lote = reg_finca_actual.get('id_lote', reg_finca_actual.get('lote', r.get('id_lote', r.get('lote', ''))))
+                        new_lote = st.text_input("Número de Lote (Finca)", value=str(def_lote), key="elote_finca_h")
                         
-                    new_obs = st.text_area("Observaciones", value=str(r.get('observaciones', '')), key="eobs_h")
+                    def_obs = reg_finca_actual.get('observaciones', r.get('observaciones', ''))
+                    new_obs = st.text_area("Observaciones", value=str(def_obs), key="eobs_finca_h")
                     
-                    if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                    if st.button("💾 Guardar Cambios para esta Finca", type="primary", use_container_width=True):
                         try:
                             _, sh, _ = get_db()
-                            ws = sh.worksheet("OrdenesCarga")
-                            cell = ws.find(sel_orden)
-                            headers = [str(h).strip() for h in ws.row_values(1)]
-                            def idx_col(name): return headers.index(name) + 1 if name in headers else None
+                            ws_of = sh.worksheet("Orden_Fincas")
+                            headers_of = [str(h).strip() for h in ws_of.row_values(1)]
                             
-                            if idx_col("folio_factura"): ws.update_cell(cell.row, idx_col("folio_factura"), new_fac)
-                            if idx_col("remision"): ws.update_cell(cell.row, idx_col("remision"), new_rem)
-                            if idx_col("id_lote"): ws.update_cell(cell.row, idx_col("id_lote"), new_lote)
-                            elif idx_col("lote"): ws.update_cell(cell.row, idx_col("lote"), new_lote)
-                            if idx_col("observaciones"): ws.update_cell(cell.row, idx_col("observaciones"), new_obs)
+                            # Buscar la celda o fila en Orden_Fincas que coincida con orden y finca
+                            cell_found = None
+                            all_records = ws_of.get_all_records()
+                            row_idx = 2
+                            for rec in all_records:
+                                if str(rec.get('id_orden', '')).strip().upper() == str(sel_orden).strip().upper() and \
+                                   str(rec.get('id_finca', '')).strip().upper() == str(id_finca_activa).strip().upper():
+                                    cell_found = row_idx
+                                    break
+                                row_idx += 1
+                                
+                            def idx_col_of(name): return headers_of.index(name) + 1 if name in headers_of else None
+
+                            if cell_found:
+                                if idx_col_of("folio_factura"): ws_of.update_cell(cell_found, idx_col_of("folio_factura"), new_fac)
+                                if idx_col_of("remision"): ws_of.update_cell(cell_found, idx_col_of("remision"), new_rem)
+                                if idx_col_of("id_lote"): ws_of.update_cell(cell_found, idx_col_of("id_lote"), new_lote)
+                                elif idx_col_of("lote"): ws_of.update_cell(cell_found, idx_col_of("lote"), new_lote)
+                                if idx_col_of("observaciones"): ws_of.update_cell(cell_found, idx_col_of("observaciones"), new_obs)
+                            else:
+                                # Si no existe el registro detallado en Orden_Fincas, lo agregamos
+                                ensure_columns_exist(ws_of, ["id", "id_orden", "id_finca", "folio_factura", "remision", "id_lote", "observaciones"])
+                                append_row_dict_safe(ws_of, {
+                                    "id": f"{sel_orden}-{id_finca_activa}",
+                                    "id_orden": sel_orden,
+                                    "id_finca": id_finca_activa,
+                                    "folio_factura": new_fac,
+                                    "remision": new_rem,
+                                    "id_lote": new_lote,
+                                    "observaciones": new_obs
+                                })
                             
-                            st.success("¡Información actualizada correctamente!")
+                            st.success(f"¡Información actualizada correctamente para la finca {finca_sel_nombre}!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error al actualizar: {e}")
 
-    elif menu_sel == "⚙️ Catálogos Maestros":
-        pass
-
-    elif menu_sel == "🗺️ Seguimiento":
-        pass        
+    
     # --------------------------------------------------------------------------
     # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
     # --------------------------------------------------------------------------
