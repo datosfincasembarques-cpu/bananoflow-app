@@ -531,7 +531,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         except Exception as e:
                             st.error(f"Error al actualizar: {e}")
 
-   # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
     # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
     # --------------------------------------------------------------------------
     elif menu_sel == "⚙️ Catálogos Maestros":
@@ -596,7 +596,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 if not fila_match.empty:
                     datos_fila = fila_match.iloc[0].to_dict()
                     
-                    with st.form(key=f"form_mod_{catalogo_sel}"):
+                    # Incluimos id_a_modificar en la key del form para asegurar que se redibuje al cambiar de registro en cualquier catálogo
+                    with st.form(key=f"form_mod_{catalogo_sel}_{id_a_modificar}"):
                         st.markdown(f"Editando registro: **{id_a_modificar}**")
                         datos_editados = {}
                         for k, v in datos_fila.items():
@@ -612,11 +613,12 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                         default_idx = idx_l
                                         break
                                         
-                                lin_sel_mod = st.selectbox("Línea de Transporte", lin_nombres if lin_nombres else ["Sin líneas"], index=default_idx, key=f"edit_{catalogo_sel}_{k}_combo")
+                                lin_sel_mod = st.selectbox("Línea de Transporte", lin_nombres if lin_nombres else ["Sin líneas"], index=default_idx, key=f"edit_{catalogo_sel}_{k}_{id_a_modificar}_combo")
                                 lin_data_mod = lin_mapa.get(lin_sel_mod, {})
                                 datos_editados[k] = str(lin_data_mod.get('id_linea', '') or lin_sel_mod)
                             else:
-                                datos_editados[k] = st.text_input(f"Modificar {k}", value=str(v), key=f"edit_{catalogo_sel}_{k}")
+                                # Clave dinámica usando el id actual del registro para evitar persistencia errónea entre elementos
+                                datos_editados[k] = st.text_input(f"Modificar {k}", value=str(v), key=f"edit_{catalogo_sel}_{k}_{id_a_modificar}")
                         
                         col_btn1, col_btn2 = st.columns(2)
                         with col_btn1:
@@ -652,7 +654,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error al eliminar: {e}")
-
     # --------------------------------------------------------------------------
     # 6.5 Submódulo: 🗺️ Seguimiento
     # --------------------------------------------------------------------------
