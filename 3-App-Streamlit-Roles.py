@@ -790,15 +790,13 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(f"Error al registrar salida: {e}")
                     
-    # ==============================================================================
+# ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
 elif st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     st.markdown("Vehículos en Finca / Tránsito")
     
-    # Forzar la recarga limpia limpiando la caché y obteniendo los datos actualizados
-    st.cache_data.clear()
     df_of, _ = get_df_safe("Orden_Fincas")
     finca_actual = str(st.session_state.finca_asignada)
     
@@ -834,10 +832,30 @@ elif st.session_state.rol == "VIGILANCIA":
         df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
 
         info_orden = {}
-        if oc_sel != "Sin OC pendientes" and not df_pendientes.empty:
-            match_row = df_pendientes[df_pendientes['id_orden'].astype(str) == str(oc_sel)]
-            if not match_row.empty:
-                info_orden = match_row.iloc[0].to_dict()
+        if oc_sel != "Sin OC pendientes":
+            try:
+                _, sh_db, _ = get_db()
+                for nombre_hoja in ["OrdenesCarga", "Embarques", "Control_Embarques", "Ordenes"]:
+                    try:
+                        ws_gen = sh_db.worksheet(nombre_hoja)
+                        df_gen = pd.DataFrame(ws_gen.get_all_records())
+                        if not df_gen.empty:
+                            cols_posibles = [c for c in df_gen.columns if 'orden' in c.lower() or 'oc' in c.lower()]
+                            for col in cols_posibles:
+                                match_gen = df_gen[df_gen[col].astype(str) == str(oc_sel)]
+                                if not match_gen.empty:
+                                    info_orden = match_gen.iloc[0].to_dict()
+                                    break
+                        if info_orden: break
+                    except:
+                        continue
+            except:
+                pass
+            
+            if not info_orden and not df_pendientes.empty:
+                match_row = df_pendientes[df_pendientes['id_orden'].astype(str) == str(oc_sel)]
+                if not match_row.empty:
+                    info_orden = match_row.iloc[0].to_dict()
 
         id_operador_raw = str(info_orden.get('id_operador', '')).strip()
         id_tractor_raw = str(info_orden.get('id_tractor', '')).strip()
@@ -863,7 +881,7 @@ elif st.session_state.rol == "VIGILANCIA":
                 nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
 
         desc_tractor = id_tractor_raw or "No especificado"
-        placas_tractor = "No especificada"
+        placas_tractor = "No especificado"
         if not df_tr_unif.empty and id_tractor_raw:
             col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
             match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
@@ -955,11 +973,15 @@ elif st.session_state.rol == "VIGILANCIA":
                 append_row_dict_safe(ws_v, dict_reg)
                 
                 ws_of = sh.worksheet("Orden_Fincas")
-                cell_of = ws_of.find(str(oc_sel))
-                if cell_of:
-                    headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-                    if "estado_carga" in headers_of:
-                        ws_of.update_cell(cell_of.row, headers_of.index("estado_carga") + 1, "LLEGADO_CASETA")
+                all_of_records = ws_of.get_all_records()
+                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
+                
+                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
+                    col_idx_estado = headers_of.index("estado_carga") + 1
+                    for idx, row in enumerate(all_of_records, start=2):
+                        if str(row.get("id_orden", "")).strip() == str(oc_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
+                            ws_of.update_cell(idx, col_idx_estado, "LLEGADO_CASETA")
+                            break
                 
                 st.cache_data.clear()
                 st.success(f"✅ ¡Entrada guardada con éxito a las {hora_dispositivo}!")
@@ -1036,7 +1058,7 @@ elif st.session_state.rol == "VIGILANCIA":
                     "fecha_hora": str(hora_dispositivo),
                     "hora_manual": str(datetime.now().strftime('%H:%M:%S')),
                     "odometro": "0",
-                    "observaciones": f"Salida Verificación Coincide ({estado_verificacion_sal})",
+                    "observaciones": f"Salida Finca {finca_actual} Verificación Coincide ({estado_verificacion_sal})",
                     "id_usuario": str(st.session_state.get("username", "vigilante")),
                     "fotos_links": "PENDIENTE",
                     "tractor_foto": "CARGADA_SALIDA" if foto_tr_sal is not None else "PENDIENTE",
@@ -1047,14 +1069,21 @@ elif st.session_state.rol == "VIGILANCIA":
                 append_row_dict_safe(ws_v, dict_reg_s)
                 
                 ws_of = sh.worksheet("Orden_Fincas")
-                cell_of = ws_of.find(str(oc_sal_sel))
-                if cell_of:
-                    headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-                    if "estado_carga" in headers_of:
-                        ws_of.update_cell(cell_of.row, headers_of.index("estado_carga") + 1, "COMPLETADO_SALIDA")
+                all_of_records = ws_of.get_all_records()
+                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
+                
+                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
+                    col_idx_estado = headers_of.index("estado_carga") + 1
+                    for idx, row in enumerate(all_of_records, start=2):
+                        val_ord = str(row.get("id_orden", "")).strip()
+                        val_fin = str(row.get("id_finca", "")).strip()
+                        
+                        if val_ord == str(oc_sal_sel) and val_fin.upper() == str(finca_actual).upper():
+                            ws_of.update_cell(idx, col_idx_estado, "SALIDA_FINCA")
+                            break
                 
                 st.cache_data.clear()
-                st.success(f"✅ ¡Salida registrada con éxito a las {hora_dispositivo}!")
+                st.success(f"✅ ¡Salida de la finca {finca_actual} registrada con éxito a las {hora_dispositivo}!")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
