@@ -4,6 +4,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import time
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -12,7 +13,7 @@ st.set_page_config(page_title="Control Operativo - Embarques V5", layout="wide",
 
 
 # ==============================================================================
-# 2. CONEXIÓN Y CARGA SEGURA DE DATOS (GOOGLE SHEETS)
+# 2. CONEXIÓN Y CARGA SEGURA DE DATOS (CON TOLERANCIA A FALLOS DE RED)
 # ==============================================================================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 SPREADSHEET_NAME = st.secrets["app_config"]["spreadsheet_name"] if "app_config" in st.secrets else "Sistema_Banano_BD"
@@ -30,42 +31,44 @@ def get_db():
     drive_service = build('drive', 'v3', credentials=creds)
     return client, sh, drive_service
 
-def get_df_safe(sheet_name):
-    try:
-        _, sh, _ = get_db()
-    except Exception as e:
-        return pd.DataFrame(dtype=str), None
-
-    mapa = {
-        "Tractos": ["Tractos","Tractocamiones"],
-        "Tractocamiones": ["Tractocamiones","Tractos"],
-        "Cajas": ["Cajas","Cajas_Thermoking"],
-        "Cajas_Thermoking": ["Cajas_Thermoking","Cajas"],
-    }
-    candidatos = mapa.get(sheet_name, [sheet_name])
-    for name in candidatos:
+def get_df_safe(sheet_name, max_retries=3):
+    """Intenta descargar la tabla con reintentos automáticos si falla la señal móvil."""
+    intentos = 0
+    while intentos < max_retries:
         try:
-            ws = sh.worksheet(name)
-            data = ws.get_all_records()
-            df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
-            df.columns = [str(c).strip() for c in df.columns]
-            return df, ws
-        except: 
-            continue
-            
-    try:
-        for ws in sh.worksheets():
-            tl = ws.title.lower()
-            sl = sheet_name.lower()
-            if sl in tl or tl in sl:
-                data = ws.get_all_records()
-                df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
-                df.columns = [str(c).strip() for c in df.columns]
-                return df, ws
-    except: 
-        pass
-        
-    return pd.DataFrame(dtype=str), None
+            _, sh, _ = get_db()
+            mapa = {
+                "Tractos": ["Tractos","Tractocamiones"],
+                "Tractocamiones": ["Tractocamiones","Tractos"],
+                "Cajas": ["Cajas","Cajas_Thermoking"],
+                "Cajas_Thermoking": ["Cajas_Thermoking","Cajas"],
+            }
+            candidatos = mapa.get(sheet_name, [sheet_name])
+            for name in candidatos:
+                try:
+                    ws = sh.worksheet(name)
+                    data = ws.get_all_records()
+                    df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
+                    df.columns = [str(c).strip() for c in df.columns]
+                    return df, ws
+                except: 
+                    continue
+                    
+            for ws in sh.worksheets():
+                tl = ws.title.lower()
+                sl = sheet_name.lower()
+                if sl in tl or tl in sl:
+                    data = ws.get_all_records()
+                    df = pd.DataFrame(data, dtype=str) if data else pd.DataFrame(dtype=str)
+                    df.columns = [str(c).strip() for c in df.columns]
+                    return df, ws
+            return pd.DataFrame(dtype=str), None
+        except Exception as e:
+            intentos += 1
+            if intentos >= max_retries:
+                st.warning(f"⚠️ Sin conexión estable al intentar cargar '{sheet_name}'. Verifique su señal móvil.")
+                return pd.DataFrame(dtype=str), None
+            time.sleep(1.5) # Espera 1.5 segundos antes de reintentar
 
 def ensure_columns_exist(ws, cols):
     try:
@@ -76,16 +79,22 @@ def ensure_columns_exist(ws, cols):
                 headers.append(col)
     except: pass
 
-def append_row_dict_safe(ws, data_dict):
-    try:
-        ensure_columns_exist(ws, list(data_dict.keys()))
-        headers = [str(h).strip() for h in ws.row_values(1)]
-        row = [str(data_dict.get(h,"")) for h in headers]
-        ws.append_row(row, value_input_option='USER_ENTERED')
-        return True
-    except Exception as e:
-        st.error(f"Error guardando: {e}")
-        return False
+def append_row_dict_safe(ws, data_dict, max_retries=3):
+    """Intenta guardar el registro con reintentos si la red parpadea al enviar."""
+    intentos = 0
+    while intentos < max_retries:
+        try:
+            ensure_columns_exist(ws, list(data_dict.keys()))
+            headers = [str(h).strip() for h in ws.row_values(1)]
+            row = [str(data_dict.get(h,"")) for h in headers]
+            ws.append_row(row, value_input_option='USER_ENTERED')
+            return True
+        except Exception as e:
+            intentos += 1
+            if intentos >= max_retries:
+                st.error(f"❌ Error de red al guardar tras {max_retries} intentos: {e}. Sus datos están seguros en pantalla, intente de nuevo.")
+                return False
+            time.sleep(2)
 
 try:
     client, sh, drive_service = get_db()
@@ -289,7 +298,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
     # --------------------------------------------------------------------------
-    # 6.1 Submódulo: 📦 Crear Orden
+    # 6.1 Submódulo: 📦 Crear Orden (Con Buffer de Memoria Anti-Pérdida)
     # --------------------------------------------------------------------------
     if menu_sel == "📦 Crear Orden":
         st.subheader("📝 Generación de Nueva Orden de Carga")
@@ -441,20 +450,19 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         "ruta_fincas_ids": ",".join(ids_fin_ruta)
                     }
                     
-                    append_row_dict_safe(ws_ord, row)
-                    
-                    ws_ruta = sh.worksheet("Orden_Fincas")
-                    for idx, fid in enumerate(ids_fin_ruta):
-                        append_row_dict_safe(ws_ruta, {
-                            "id": f"{id_orden}-{fid}", 
-                            "id_orden": id_orden, 
-                            "id_finca": fid, 
-                            "orden_visita": idx + 1, 
-                            "estado_carga": "PENDIENTE"
-                        })
-                        
-                    st.balloons()
-                    st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
+                    if append_row_dict_safe(ws_ord, row):
+                        ws_ruta = sh.worksheet("Orden_Fincas")
+                        for idx, fid in enumerate(ids_fin_ruta):
+                            append_row_dict_safe(ws_ruta, {
+                                "id": f"{id_orden}-{fid}", 
+                                "id_orden": id_orden, 
+                                "id_finca": fid, 
+                                "orden_visita": idx + 1, 
+                                "estado_carga": "PENDIENTE"
+                            })
+                            
+                        st.balloons()
+                        st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
 
@@ -474,7 +482,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             df_show = df_oc.tail(20).iloc[::-1]
             st.dataframe(df_show[cols_show] if cols_show else df_show, use_container_width=True)
         else:
-            st.info("No hay órdenes expedidas registradas en este momento.")
+            st.info("No hay órdenes expedidas registradas en este momento (o sin conexión para cargarlas).")
 
     # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura
@@ -515,7 +523,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.success("¡Información actualizada correctamente!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Error al actualizar: {e}")
+                            st.error(f"Error al actualizar por fallo de red: {e}")
 
     # --------------------------------------------------------------------------
     # 6.4 Submódulo: 🗺️ Seguimiento
@@ -535,7 +543,7 @@ elif st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     df_of, _ = get_df_safe("Orden_Fincas")
     if df_of.empty: 
-        st.warning("No hay órdenes asignadas para control de acceso.")
+        st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
     else:
         finca = st.session_state.finca_asignada
         df_f = df_of if finca.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca.upper()]
