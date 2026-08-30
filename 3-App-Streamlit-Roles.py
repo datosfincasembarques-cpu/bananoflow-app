@@ -858,7 +858,18 @@ elif st.session_state.rol == "VIGILANCIA":
         lista_ocs = df_pendientes['id_orden'].astype(str).tolist() if not df_pendientes.empty else ["Sin OC pendientes"]
         oc_sel = st.selectbox("Seleccione la OC del Transporte:", lista_ocs, key="vis_oc_sel_rol")
         
-        # Búsqueda cruzada de los detalles en la tabla matriz de órdenes
+        # Cargar catálogos maestros para traducir códigos a nombres reales
+        df_op_m, _ = get_df_safe("Operadores")
+        df_lin_m, _ = get_df_safe("LineasTransporte")
+        df_tr_m, _ = get_df_safe("Tractos")
+        df_tr2_m, _ = get_df_safe("Tractocamiones")
+        df_cj_m, _ = get_df_safe("Cajas")
+        df_cj2_m, _ = get_df_safe("Cajas_Thermoking")
+        
+        df_tr_unif = pd.concat([df_tr_m, df_tr2_m], ignore_index=True) if not df_tr_m.empty and not df_tr2_m.empty else (df_tr_m if not df_tr_m.empty else df_tr2_m)
+        df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
+
+        # Búsqueda de datos de la orden en la matriz general
         info_orden = {}
         if oc_sel != "Sin OC pendientes":
             try:
@@ -885,28 +896,64 @@ elif st.session_state.rol == "VIGILANCIA":
                 if not match_row.empty:
                     info_orden = match_row.iloc[0].to_dict()
 
-        transportista = "No especificado"
-        operador = "No especificado"
-        caja_info = "No especificado"
-        
-        for k, v in info_orden.items():
-            k_lower = k.lower()
-            if any(term in k_lower for term in ['linea', 'transportista', 'transporte']):
-                transportista = str(v)
-            elif any(term in k_lower for term in ['chofer', 'operador', 'conductor']):
-                operador = str(v)
-            elif any(term in k_lower for term in ['caja', 'tractor', 'placa', 'unidad', 'equipo']):
-                caja_info = str(v)
+        # Extraer IDs base de la orden
+        id_operador_raw = str(info_orden.get('id_operador', '')).strip()
+        id_tractor_raw = str(info_orden.get('id_tractor', '')).strip()
+        id_linea_raw = str(info_orden.get('id_linea', '')).strip()
+        id_caja1_raw = str(info_orden.get('id_caja1', '')).strip()
 
-        # Recuadro visual para corroboración en caseta
+        # Traducir Operador a Nombre Completo
+        nombre_operador = id_operador_raw or "No especificado"
+        if not df_op_m.empty and id_operador_raw:
+            col_id_op = next((c for c in df_op_m.columns if 'id' in c.lower()), df_op_m.columns[0])
+            col_nom_op = next((c for c in df_op_m.columns if 'nombre' in c.lower() or 'operador' in c.lower()), df_op_m.columns[1] if len(df_op_m.columns) > 1 else col_id_op)
+            match_op = df_op_m[df_op_m[col_id_op].astype(str).str.upper() == id_operador_raw.upper()]
+            if not match_op.empty:
+                nombre_operador = str(match_op.iloc[0].get(col_nom_op, id_operador_raw))
+
+        # Traducir Línea de Transporte
+        nombre_linea = id_linea_raw or "No especificado"
+        if not df_lin_m.empty and id_linea_raw:
+            col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
+            col_nom_lin = next((c for c in df_lin_m.columns if 'razon' in c.lower() or 'nombre' in c.lower()), df_lin_m.columns[1] if len(df_lin_m.columns) > 1 else col_id_lin)
+            match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.upper() == id_linea_raw.upper()]
+            if not match_lin.empty:
+                nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
+
+        # Traducir Tractor / Unidad y Placas
+        desc_tractor = id_tractor_raw or "No especificado"
+        placas_tractor = "No especificado"
+        if not df_tr_unif.empty and id_tractor_raw:
+            col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
+            match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.upper() == id_tractor_raw.upper()]
+            if not match_tr.empty:
+                r_tr = match_tr.iloc[0]
+                marca = str(r_tr.get('marca', r_tr.get('modelo', 'Unidad')))
+                eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
+                desc_tractor = f"{marca} (Eco: {eco})" if eco else marca
+                placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
+
+        # Traducir Caja 1
+        desc_caja1 = id_caja1_raw or "No especificado"
+        if not df_cj_unif.empty and id_caja1_raw:
+            col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
+            match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.upper() == id_caja1_raw.upper()]
+            if not match_cj.empty:
+                r_cj = match_cj.iloc[0]
+                placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
+                desc_caja1 = f"Caja Placa: {placa_cj}" if placa_cj else id_caja1_raw
+
+        # Recuadro visual detallado para corroboración en caseta
         st.markdown(
             f"""
             <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #28a745; margin-bottom: 15px;'>
                 <p style='margin: 0; font-weight: bold; color: #28a745; font-size: 16px;'>🔍 Datos para Corroboración en Caseta:</p>
                 <hr style='margin: 6px 0;'>
-                <p style='margin: 4px 0;'><b>🏢 Línea / Transportista:</b> {transportista}</p>
-                <p style='margin: 4px 0;'><b>👤 Operador / Chofer:</b> {operador}</p>
-                <p style='margin: 4px 0;'><b>🚛 Unidad / Caja Asignada:</b> {caja_info}</p>
+                <p style='margin: 4px 0;'><b>👤 Operador :</b> {nombre_operador}</p>
+                <p style='margin: 4px 0;'><b>🚛 Unidad :</b> {desc_tractor}</p>
+                <p style='margin: 4px 0;'><b>🏷️ Placas tractor :</b> {placas_tractor}</p>
+                <p style='margin: 4px 0;'><b>📦 Caja :</b> {desc_caja1}</p>
+                <p style='margin: 4px 0;'><b>🏢 Linea :</b> {nombre_linea}</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -945,7 +992,7 @@ elif st.session_state.rol == "VIGILANCIA":
                         "foto_tractor_placa_url": "CARGADA" if foto_tractor is not None else "PENDIENTE",
                         "foto_caja_placa_url": "CARGADA" if foto_caja is not None else "PENDIENTE",
                         "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                        "observaciones": f"Placa física: {placa_guia} | Op: {operador}"
+                        "observaciones": f"Placa física: {placa_guia} | Op: {nombre_operador}"
                     }
                     
                     ensure_columns_exist(ws_v, list(dict_reg.keys()))
