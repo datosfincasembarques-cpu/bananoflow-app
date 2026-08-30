@@ -498,7 +498,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     # 6.3 Submódulo: ✏️ Remisión/Factura
     # --------------------------------------------------------------------------
     elif menu_sel == "✏️ Remisión/Factura":
-        st.subheader("✏️ Edición Rápida de Facturas y Lotes")
+        st.subheader("✏️ Edición Rápida de Factura, Remisión y Lotes")
         df_oc_edit, _ = get_df_safe("OrdenesCarga")
         if df_oc_edit.empty:
             st.info("No hay órdenes disponibles para editar.")
@@ -509,9 +509,37 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 fila = df_oc_edit[df_oc_edit['id_orden'] == sel_orden]
                 if not fila.empty:
                     r = fila.iloc[0]
-                    c1, c2 = st.columns(2)
-                    with c1: new_fac = st.text_input("Factura", value=str(r.get('folio_factura', '')), key="efac_h")
-                    with c2: new_lote = st.text_input("Lote", value=str(r.get('id_lote', '')), key="elote_h")
+                    
+                    # 📋 Tarjeta informativa completa de la unidad y transporte
+                    op = str(r.get('operador', 'N/D'))
+                    uni = str(r.get('unidad', 'N/D'))
+                    pla = str(r.get('placas', 'N/D'))
+                    caj = str(r.get('caja', 'N/D'))
+                    lin = str(r.get('linea_transporte', 'N/D'))
+                    finca_origen = str(r.get('finca', 'N/D'))
+                    
+                    st.markdown(
+                        f"""
+                        <div style='background-color: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #ced4da; margin-bottom: 15px;'>
+                            <p style='margin: 0; font-size: 14px; color: #333;'><b>🚚 Información de la Unidad y Carga:</b></p>
+                            <hr style='margin: 6px 0; border-top: 1px solid #ccc;'>
+                            <span style='font-size: 13px; color: #495057;'><b>Finca:</b> {finca_origen} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Operador:</b> {op}</span><br>
+                            <span style='font-size: 13px; color: #495057;'><b>Unidad:</b> {uni} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Placas:</b> {pla}</span><br>
+                            <span style='font-size: 13px; color: #495057;'><b>Caja:</b> {caj} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Línea de Transporte:</b> {lin}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    
+                    # 🗂️ Campos de captura de oficina (Factura, Remisión, Lote)
+                    c1, c2, c3 = st.columns(3)
+                    with c1: 
+                        new_fac = st.text_input("Número de Factura", value=str(r.get('folio_factura', '')), key="efac_h")
+                    with c2: 
+                        new_rem = st.text_input("Número de Remisión", value=str(r.get('remision', '')), key="erem_h")
+                    with c3: 
+                        new_lote = st.text_input("Número de Lote", value=str(r.get('id_lote', '')), key="elote_h")
+                        
                     new_obs = st.text_area("Observaciones", value=str(r.get('observaciones', '')), key="eobs_h")
                     
                     if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
@@ -523,7 +551,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             def idx_col(name): return headers.index(name) + 1 if name in headers else None
                             
                             if idx_col("folio_factura"): ws.update_cell(cell.row, idx_col("folio_factura"), new_fac)
+                            if idx_col("remision"): ws.update_cell(cell.row, idx_col("remision"), new_rem)
                             if idx_col("id_lote"): ws.update_cell(cell.row, idx_col("id_lote"), new_lote)
+                            elif idx_col("lote"): ws.update_cell(cell.row, idx_col("lote"), new_lote)
                             if idx_col("observaciones"): ws.update_cell(cell.row, idx_col("observaciones"), new_obs)
                             
                             st.success("¡Información actualizada correctamente!")
