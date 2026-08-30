@@ -920,7 +920,98 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al registrar salida: {e}")
+
+# --------------------------------------------------------------------------
+    # 6.6 Submódulo: 📜 Compra y Guías Fitosanitarias
+    # --------------------------------------------------------------------------
+    elif menu_sel == "📜 Compra y Guías":
+        st.subheader("📜 Control de Compra e Inventario de Guías Fitosanitarias")
+        
+        # Pestañas internas para separar el Registro de Compra y el Inventario/Seguimiento
+        tab_compra, tab_inventario = st.tabs(["🛒 Registrar Compra de Guías", "📊 Inventario y Consumo por Empresa"])
+        
+        with tab_compra:
+            st.markdown("##### 📝 Registro de Adquisición de Folios")
+            
+            df_guias, _ = get_df_safe("GuiasFitosanitarias")
+            
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
+                guia_emp_sel = st.selectbox("Empresa Adquiriente", emp_nombres if emp_nombres else ["EMP-01"], key="g_emp_compra")
+                guia_data_emp = emp_mapa.get(guia_emp_sel, {})
+                id_emp_guia = str(guia_data_emp.get('id_empresa', '') or guia_emp_sel)
+                
+                cantidad_guias = st.number_input("Cantidad de Juegos de Guías", min_value=1, value=20, step=1, key="g_cantidad")
+                precio_unitario = st.number_input("Precio Unitario por Guía ($)", min_value=0.0, value=250.0, step=10.0, key="g_precio")
+                
+            with col_g2:
+                fecha_compra = st.date_input("Fecha de Adquisición", value=datetime.now(), key="g_fecha")
+                num_factura_compra = st.text_input("Factura / Comprobante de Compra", placeholder="Ej: COMP-GUIA-01", key="g_factura_compra")
+                observaciones_guia = st.text_area("Observaciones del Lote", placeholder="Detalles de los folios o entrega...", key="g_obs")
+
+            st.markdown("##### 🔢 Rangos de Folios (4 Documentos por Guía)")
+            st.info("Ingrese el folio inicial y final para cada uno de los 4 documentos que conforman el juego.")
+
+            gc1, gc2 = st.columns(2)
+            with gc1:
+                doc1_ini = st.text_input("Doc 1 - Folio Inicial", placeholder="Ej: A-0001", key="g_d1_ini")
+                doc1_fin = st.text_input("Doc 1 - Folio Final", placeholder="Ej: A-0020", key="g_d1_fin")
+                doc2_ini = st.text_input("Doc 2 - Folio Inicial", placeholder="Ej: B-0001", key="g_d2_ini")
+                doc2_fin = st.text_input("Doc 2 - Folio Final", placeholder="Ej: B-0020", key="g_d2_fin")
+            with gc2:
+                doc3_ini = st.text_input("Doc 3 - Folio Inicial", placeholder="Ej: C-0001", key="g_d3_ini")
+                doc3_fin = st.text_input("Doc 3 - Folio Final", placeholder="Ej: C-0020", key="g_d3_fin")
+                doc4_ini = st.text_input("Doc 4 - Folio Inicial", placeholder="Ej: D-0001", key="g_d4_ini")
+                doc4_fin = st.text_input("Doc 4 - Folio Final", placeholder="Ej: D-0020", key="g_d4_fin")
+
+            costo_total = cantidad_guias * precio_unitario
+            st.markdown(f"<div style='background-color: #e8f4fd; padding: 10px; border-radius: 6px; margin-bottom: 15px;'><b>💰 Importe Total Calculado:</b> ${costo_total:,.2f} ({cantidad_guias} juegos x ${precio_unitario:,.2f})</div>", unsafe_allow_html=True)
+
+            if st.button("💾 Registrar Compra de Guías", type="primary", use_container_width=True):
+                try:
+                    _, sh, _ = get_db()
+                    ws_g = sh.worksheet("GuiasFitosanitarias")
+                    id_compra_guia = f"GF-{datetime.now().strftime('%Y%m%d%H%M')}"
                     
+                    ensure_columns_exist(ws_g, [
+                        "id_compra", "id_empresa", "fecha_compra", "cantidad", "precio_unitario", 
+                        "costo_total", "factura_compra", "doc1_inicial", "doc1_final", 
+                        "doc2_inicial", "doc2_final", "doc3_inicial", "doc3_final", 
+                        "doc4_inicial", "doc4_final", "guias_disponibles", "observaciones"
+                    ])
+                    
+                    row_guia = {
+                        "id_compra": id_compra_guia,
+                        "id_empresa": id_emp_guia,
+                        "fecha_compra": fecha_compra.isoformat(),
+                        "cantidad": cantidad_guias,
+                        "precio_unitario": precio_unitario,
+                        "costo_total": costo_total,
+                        "factura_compra": num_factura_compra,
+                        "doc1_inicial": doc1_ini, "doc1_final": doc1_fin,
+                        "doc2_inicial": doc2_ini, "doc2_final": doc2_fin,
+                        "doc3_inicial": doc3_ini, "doc3_final": doc3_fin,
+                        "doc4_inicial": doc4_ini, "doc4_final": doc4_fin,
+                        "guias_disponibles": cantidad_guias, 
+                        "observaciones": observaciones_guia
+                    }
+                    
+                    if append_row_dict_safe(ws_g, row_guia):
+                        st.success(f"✅ ¡Compra de guías registrada exitosamente con ID **{id_compra_guia}**!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error al registrar la compra: {e}")
+
+        with tab_inventario:
+            st.markdown("##### 📊 Estatus e Inventario de Guías por Empresa")
+            df_inv_guias, _ = get_df_safe("GuiasFitosanitarias")
+            
+            if df_inv_guias.empty:
+                st.info("No hay registros de compras de guías fitosanitarias.")
+            else:
+                st.dataframe(df_inv_guias, use_container_width=True)
+                st.caption("Control de folios adquiridos, stock disponible y pendientes de devolución por lote.")
+
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
