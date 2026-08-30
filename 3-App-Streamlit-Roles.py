@@ -78,6 +78,7 @@ def get_df_safe_cached(sheet_name):
     return pd.DataFrame(dtype=str)
 
 def get_df_safe(sheet_name, max_retries=3):
+    """Devuelve únicamente el DataFrame asegurando compatibilidad con el sistema de caché."""
     return get_df_safe_cached(sheet_name)
 
 # Inicialización segura de variables globales de estado de conexión
@@ -90,8 +91,7 @@ except Exception as e:
     err_conexion = str(e)
 
 if "conectado" not in st.session_state:
-    st.session_state.conectado = conectado
-    
+    st.session_state.conectado = conectado    
 
 # ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
