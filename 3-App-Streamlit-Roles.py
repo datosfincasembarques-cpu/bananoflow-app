@@ -80,10 +80,19 @@ def get_df_safe_cached(sheet_name):
 def get_df_safe(sheet_name, max_retries=3):
     return get_df_safe_cached(sheet_name)
 
-# Asegurar disponibilidad global de la variable de sesión para el control de acceso
+# Inicialización segura de variables globales de estado de conexión
+try:
+    _, _, _ = get_db()
+    conectado = True
+    err_conexion = ""
+except Exception as e:
+    conectado = False
+    err_conexion = str(e)
+
 if "conectado" not in st.session_state:
-    st.session_state.conectado = False
-conectado = st.session_state.conectado
+    st.session_state.conectado = conectado
+    
+
 # ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
 # ==============================================================================
