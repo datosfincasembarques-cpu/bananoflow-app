@@ -410,6 +410,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.warning("⚠️ Debe seleccionar un tracto y una caja válidos.")
             else:
                 try:
+                    # Obtenemos la conexión de base de datos de manera segura dentro del botón
+                    _, sh, _ = get_db()
+                    
                     id_orden = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op}"
                     ws_ord = sh.worksheet("OrdenesCarga")
                     ensure_columns_exist(ws_ord, ["id_empresa_expedidora", "empresa_nombre", "id_finca_guia_titular", "id_linea", "linea_nombre", "folio_remision", "folio_factura", "folio_factura2", "id_lote", "observaciones", "ruta_fincas_ids"])
@@ -498,6 +501,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     
                     if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
                         try:
+                            _, sh, _ = get_db()
                             ws = sh.worksheet("OrdenesCarga")
                             cell = ws.find(sel_orden)
                             headers = [str(h).strip() for h in ws.row_values(1)]
