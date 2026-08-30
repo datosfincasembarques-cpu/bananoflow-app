@@ -960,7 +960,6 @@ elif st.session_state.rol == "VIGILANCIA":
             unsafe_allow_html=True
         )
 
-        # Diseño Futurista con Énfasis Verde en Coincidencia
         st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Panel de Validación Tecnológica:</p>", unsafe_allow_html=True)
         
         val_coincide_ent = st.toggle("🟢 **¿Coincide la Placa / Guía Física?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_coincide_ent")
@@ -980,31 +979,33 @@ elif st.session_state.rol == "VIGILANCIA":
                 _, sh, _ = get_db()
                 
                 nombres_hojas = [w.title for w in sh.worksheets()]
-                if "vigilancia_registro" in nombres_hojas:
-                    ws_v = sh.worksheet("vigilancia_registro")
+                if "Bitacora_Vigilancia" in nombres_hojas:
+                    ws_v = sh.worksheet("Bitacora_Vigilancia")
                 else:
-                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                    ws_v = sh.add_worksheet(title="Bitacora_Vigilancia", rows=1000, cols=20)
                 
                 if not ws_v.get_all_values():
                     ws_v.append_row([
-                        "id_registro", "id_orden", "id_finca", "id_caja", 
-                        "tipo_evento", "fecha_hora", "foto_tractor_placa_url", 
-                        "foto_caja_placa_url", "id_usuario_vigilante", "observaciones"
+                        "id_bitacora", "id_orden", "id_finca", "tipo_movimiento", 
+                        "fecha_hora", "hora_manual", "odometro", "observaciones", 
+                        "id_usuario", "fotos_links", "tractor_foto", "caja_foto"
                     ])
 
                 id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
                 dict_reg = {
-                    "id_registro": id_reg,
+                    "id_bitacora": id_reg,
                     "id_orden": str(oc_sel),
                     "id_finca": str(finca_actual),
-                    "id_caja": str(placas_tractor),
-                    "tipo_evento": "LLEGADA_CASETA",
+                    "tipo_movimiento": "LLEGADA_CASETA",
                     "fecha_hora": str(hora_dispositivo),
-                    "foto_tractor_placa_url": "CARGADA" if foto_tractor is not None else "PENDIENTE",
-                    "foto_caja_placa_url": "CARGADA" if foto_caja is not None else "PENDIENTE",
-                    "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                    "observaciones": f"Unidad: {desc_tractor} | Placa: {placas_tractor} | Verificación Coincide ({estado_verificacion}) | Op: {nombre_operador}"
+                    "hora_manual": str(datetime.now().strftime('%H:%M:%S')),
+                    "odometro": "0",
+                    "observaciones": f"Unidad: {desc_tractor} | Placa: {placas_tractor} | Verificación Coincide ({estado_verificacion}) | Op: {nombre_operador}",
+                    "id_usuario": str(st.session_state.get("username", "vigilante")),
+                    "fotos_links": "PENDIENTE",
+                    "tractor_foto": "CARGADA" if foto_tractor is not None else "PENDIENTE",
+                    "caja_foto": "CARGADA" if foto_caja is not None else "PENDIENTE"
                 }
                 
                 ensure_columns_exist(ws_v, list(dict_reg.keys()))
@@ -1070,31 +1071,33 @@ elif st.session_state.rol == "VIGILANCIA":
                 _, sh, _ = get_db()
                 
                 nombres_hojas = [w.title for w in sh.worksheets()]
-                if "vigilancia_registro" in nombres_hojas:
-                    ws_v = sh.worksheet("vigilancia_registro")
+                if "Bitacora_Vigilancia" in nombres_hojas:
+                    ws_v = sh.worksheet("Bitacora_Vigilancia")
                 else:
-                    ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
+                    ws_v = sh.add_worksheet(title="Bitacora_Vigilancia", rows=1000, cols=20)
                 
                 if not ws_v.get_all_values():
                     ws_v.append_row([
-                        "id_registro", "id_orden", "id_finca", "id_caja", 
-                        "tipo_evento", "fecha_hora", "foto_tractor_placa_url", 
-                        "foto_caja_placa_url", "id_usuario_vigilante", "observaciones"
+                        "id_bitacora", "id_orden", "id_finca", "tipo_movimiento", 
+                        "fecha_hora", "hora_manual", "odometro", "observaciones", 
+                        "id_usuario", "fotos_links", "tractor_foto", "caja_foto"
                     ])
 
                 id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 
                 dict_reg_s = {
-                    "id_registro": id_reg_s,
+                    "id_bitacora": id_reg_s,
                     "id_orden": str(oc_sal_sel),
                     "id_finca": str(finca_actual),
-                    "id_caja": str(placas_salida_sistema),
-                    "tipo_evento": "SALIDA_CASETA",
+                    "tipo_movimiento": "SALIDA_CASETA",
                     "fecha_hora": str(hora_dispositivo),
-                    "foto_tractor_placa_url": "CARGADA_SALIDA" if foto_tr_sal is not None else "PENDIENTE",
-                    "foto_caja_placa_url": "CARGADA_SALIDA" if foto_cj_sal is not None else "PENDIENTE",
-                    "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                    "observaciones": f"Salida Verificación Coincide ({estado_verificacion_sal})"
+                    "hora_manual": str(datetime.now().strftime('%H:%M:%S')),
+                    "odometro": "0",
+                    "observaciones": f"Salida Verificación Coincide ({estado_verificacion_sal})",
+                    "id_usuario": str(st.session_state.get("username", "vigilante")),
+                    "fotos_links": "PENDIENTE",
+                    "tractor_foto": "CARGADA_SALIDA" if foto_tr_sal is not None else "PENDIENTE",
+                    "caja_foto": "CARGADA_SALIDA" if foto_cj_sal is not None else "PENDIENTE"
                 }
                 
                 ensure_columns_exist(ws_v, list(dict_reg_s.keys()))
