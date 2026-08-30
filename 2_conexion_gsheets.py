@@ -1,4 +1,3 @@
-
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -13,23 +12,20 @@ FOTOS_BANANO_FOLDER_ID = "1AW6qmZddxQG12q4rHKQmro7Ai3RYXhAR"
 
 class BananoDB:
     def __init__(self, json_key_path="credentials.json", spreadsheet_name="Sistema_Banano_BD", drive_folder_id=FOTOS_BANANO_FOLDER_ID):
-        # Cloud: lee secrets.toml
         try:
-            if "google_credentials" in st.secrets:
-                creds_info = dict(st.secrets["google_credentials"])
-                creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+            # Lee directamente los secretos configurados en Streamlit Cloud
+            creds_info = dict(st.secrets["google_credentials"])
+            creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+            
+            if "app_config" in st.secrets:
                 spreadsheet_name = st.secrets["app_config"].get("spreadsheet_name", spreadsheet_name)
                 drive_folder_id = st.secrets["app_config"].get("fotos_folder_id", drive_folder_id)
-            else:
-                raise KeyError
-        except Exception:
-            # Local
+        except Exception as e:
+            # Fallback local por si lo ejecutas en tu computadora con el archivo físico
             if os.path.exists(json_key_path):
                 creds = Credentials.from_service_account_file(json_key_path, scopes=SCOPES)
             else:
-                # fallback env var
-                creds_info = json.loads(os.environ.get("GOOGLE_CREDENTIALS_JSON","{}"))
-                creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+                raise RuntimeError(f"No se encontraron las credenciales de Google Sheets en los Secrets de Streamlit ni localmente. Detalle: {e}")
 
         self.client = gspread.authorize(creds)
         self.sh = self.client.open(spreadsheet_name)
