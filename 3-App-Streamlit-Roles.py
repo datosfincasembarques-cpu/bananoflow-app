@@ -212,22 +212,22 @@ with st.sidebar:
         st.success(f"Sesión Activa: **{st.session_state.rol}**")
         st.markdown(f"**Usuario:** `{st.session_state.username}`")
         st.markdown(f"**Finca:** `{st.session_state.finca_asignada}`")
+        
+        # 🚀 BOTÓN DE CERRAR SESIÓN UBICADO ARRIBA (A LA MANO)
+        if st.button("🚪 Cerrar Sesión", use_container_width=True, type="secondary"):
+            for k in ["rol", "id_finca", "finca_asignada", "usuario", "username", "id_usuario", "nombre_usuario", "menu_oficina"]:
+                st.session_state[k] = None
+            st.rerun()
+            
         st.divider()
         
         if st.session_state.rol == "OFICINA_CENTRAL":
             st.markdown("### 📌 Navegación")
             menu = st.radio("Menú Oficina", ["📦 Crear Orden", "📦 Órdenes Expedidas", "✏️ Remisión/Factura", "⚙️ Catálogos Maestros", "🗺️ Seguimiento"], key="radio_menu_oficina")
             st.session_state.menu_oficina = menu
-            
-        st.divider()
-        if st.button("Cerrar Sesión", use_container_width=True):
-            for k in ["rol", "id_finca", "finca_asignada", "usuario", "username", "id_usuario", "nombre_usuario", "menu_oficina"]:
-                st.session_state[k] = None
-            st.rerun()
 
 if st.session_state.rol is None:
     st.stop()
-
 
 # ==============================================================================
 # 5. FUNCIONES AUXILIARES DE MAPEO Y LISTAS
