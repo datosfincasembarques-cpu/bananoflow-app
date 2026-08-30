@@ -494,134 +494,136 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         else:
             st.info("No hay órdenes expedidas registradas en este momento.")
 
- # --------------------------------------------------------------------------
-# 6.3 Submódulo: ✏️ Remisión/Factura
 # --------------------------------------------------------------------------
-elif menu_sel == "✏️ Remisión/Factura":
-    st.subheader("✏️ Edición Rápida de Factura, Remisión y Lotes")
-    df_oc_edit, _ = get_df_safe("OrdenesCarga")
-    
-    if df_oc_edit.empty:
-        st.info("No hay órdenes disponibles para editar.")
-    else:
-        ids = list(reversed(df_oc_edit['id_orden'].astype(str).tolist()))
-        sel_orden = st.selectbox("Seleccione la Orden a Modificar", ids[:100], key="sel_edit_hibrido")
+    # 6.3 Submódulo: ✏️ Remisión/Factura
+    # --------------------------------------------------------------------------
+    elif menu_sel == "✏️ Remisión/Factura":
+        st.subheader("✏️ Edición Rápida de Factura, Remisión y Lotes")
+        df_oc_edit, _ = get_df_safe("OrdenesCarga")
         
-        if sel_orden:
-            fila = df_oc_edit[df_oc_edit['id_orden'].astype(str) == str(sel_orden)]
-            if not fila.empty:
-                r = fila.iloc[0].to_dict()
-                
-                # Cargar catálogos auxiliares igual que en vigilancia para mostrar nombres reales
-                df_op_m, _ = get_df_safe("Operadores")
-                df_lin_m, _ = get_df_safe("LineasTransporte")
-                df_tr_m, _ = get_df_safe("Tractos")
-                df_tr2_m, _ = get_df_safe("Tractocamiones")
-                df_cj_m, _ = get_df_safe("Cajas")
-                df_cj2_m, _ = get_df_safe("Cajas_Thermoking")
-                
-                df_tr_unif = pd.concat([df_tr_m, df_tr2_m], ignore_index=True) if not df_tr_m.empty and not df_tr2_m.empty else (df_tr_m if not df_tr_m.empty else df_tr2_m)
-                df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
-
-                id_operador_raw = str(r.get('id_operador', r.get('operador', ''))).strip()
-                id_tractor_raw = str(r.get('id_tractor', r.get('unidad', ''))).strip()
-                id_linea_raw = str(r.get('id_linea', r.get('linea_transporte', ''))).strip()
-                id_caja1_raw = str(r.get('id_caja1', r.get('caja', ''))).strip()
-                finca_origen = str(r.get('id_finca', r.get('finca', 'N/D'))).strip()
-
-                # Resolver nombre del operador
-                nombre_operador = id_operador_raw or "No especificado"
-                if not df_op_m.empty and id_operador_raw:
-                    for _, row_op in df_op_m.iterrows():
-                        row_str = " ".join([str(val) for val in row_op.values])
-                        if id_operador_raw.upper() in row_str.upper():
-                            posibles_textos = [str(val) for val in row_op.values if len(str(val)) > 5 and not str(val).isdigit() and not str(val).startswith('LIN-') and not str(val).startswith('OP')]
-                            if posibles_textos:
-                                nombre_operador = posibles_textos[0]
-                                break
-
-                # Resolver línea de transporte
-                nombre_linea = id_linea_raw or "No especificada"
-                if not df_lin_m.empty and id_linea_raw:
-                    col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
-                    col_nom_lin = next((c for c in df_lin_m.columns if 'razon' in c.lower() or 'nombre' in c.lower()), df_lin_m.columns[1] if len(df_lin_m.columns) > 1 else col_id_lin)
-                    match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.strip().str.upper() == id_linea_raw.strip().upper()]
-                    if not match_lin.empty:
-                        nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
-
-                # Resolver tractor y placas
-                desc_tractor = id_tractor_raw or "No especificado"
-                placas_tractor = "No especificada"
-                if not df_tr_unif.empty and id_tractor_raw:
-                    col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
-                    match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
-                    if not match_tr.empty:
-                        r_tr = match_tr.iloc[0]
-                        marca = str(r_tr.get('marca', r_tr.get('modelo_tractor', 'Unidad')))
-                        modelo = str(r_tr.get('modelo', r_tr.get('anio', r_tr.get('año', ''))))
-                        eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
-                        partes_tr = [marca]
-                        if modelo and modelo.lower() != 'nan': partes_tr.append(f"mod {modelo}")
-                        if eco and eco.lower() != 'nan': partes_tr.append(f"(Eco: {eco})")
-                        desc_tractor = " ".join(partes_tr)
-                        placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
-
-                # Resolver caja
-                desc_caja = id_caja1_raw or "No especificada"
-                if not df_cj_unif.empty and id_caja1_raw:
-                    col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
-                    match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.strip().str.upper() == id_caja1_raw.strip().upper()]
-                    if not match_cj.empty:
-                        r_cj = match_cj.iloc[0]
-                        placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
-                        desc_caja = f"Placa: {placa_cj}" if placa_cj else id_caja1_raw
-
-                # 📋 Tarjeta informativa idéntica a la de vigilancia (Estilo visual enriquecido)
-                st.markdown(
-                    f"""
-                    <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #ffc107; margin-bottom: 15px;'>
-                        <p style='margin: 0; font-weight: bold; color: #856404; font-size: 16px;'>🔍 Datos de la Orden y Transporte:</p>
-                        <hr style='margin: 6px 0;'>
-                        <p style='margin: 4px 0;'><b>🏢 Finca:</b> {finca_origen}</p>
-                        <p style='margin: 4px 0;'><b>👤 Operador:</b> {nombre_operador}</p>
-                        <p style='margin: 4px 0;'><b>🚛 Unidad:</b> {desc_tractor} | <b>Placas:</b> {placas_tractor}</p>
-                        <p style='margin: 4px 0;'><b>📦 Caja:</b> {desc_caja}</p>
-                        <p style='margin: 4px 0;'><b>🏢 Línea de Transporte:</b> {nombre_linea}</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-                
-                # 🗂️ Campos de captura de oficina (Factura, Remisión, Lote)
-                c1, c2, c3 = st.columns(3)
-                with c1: 
-                    new_fac = st.text_input("Número de Factura", value=str(r.get('folio_factura', r.get('factura', ''))), key="efac_h")
-                with c2: 
-                    new_rem = st.text_input("Número de Remisión", value=str(r.get('remision', '')), key="erem_h")
-                with c3: 
-                    new_lote = st.text_input("Número de Lote", value=str(r.get('id_lote', r.get('lote', ''))), key="elote_h")
+        if df_oc_edit.empty:
+            st.info("No hay órdenes disponibles para editar.")
+        else:
+            ids = list(reversed(df_oc_edit['id_orden'].astype(str).tolist()))
+            sel_orden = st.selectbox("Seleccione la Orden a Modificar", ids[:100], key="sel_edit_hibrido")
+            
+            if sel_orden:
+                fila = df_oc_edit[df_oc_edit['id_orden'].astype(str) == str(sel_orden)]
+                if not fila.empty:
+                    r = fila.iloc[0].to_dict()
                     
-                new_obs = st.text_area("Observaciones", value=str(r.get('observaciones', '')), key="eobs_h")
-                
-                if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                    try:
-                        _, sh, _ = get_db()
-                        ws = sh.worksheet("OrdenesCarga")
-                        cell = ws.find(sel_orden)
-                        headers = [str(h).strip() for h in ws.row_values(1)]
-                        def idx_col(name): return headers.index(name) + 1 if name in headers else None
+                    df_op_m, _ = get_df_safe("Operadores")
+                    df_lin_m, _ = get_df_safe("LineasTransporte")
+                    df_tr_m, _ = get_df_safe("Tractos")
+                    df_tr2_m, _ = get_df_safe("Tractocamiones")
+                    df_cj_m, _ = get_df_safe("Cajas")
+                    df_cj2_m, _ = get_df_safe("Cajas_Thermoking")
+                    
+                    df_tr_unif = pd.concat([df_tr_m, df_tr2_m], ignore_index=True) if not df_tr_m.empty and not df_tr2_m.empty else (df_tr_m if not df_tr_m.empty else df_tr2_m)
+                    df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
+
+                    id_operador_raw = str(r.get('id_operador', r.get('operador', ''))).strip()
+                    id_tractor_raw = str(r.get('id_tractor', r.get('unidad', ''))).strip()
+                    id_linea_raw = str(r.get('id_linea', r.get('linea_transporte', ''))).strip()
+                    id_caja1_raw = str(r.get('id_caja1', r.get('caja', ''))).strip()
+                    finca_origen = str(r.get('id_finca', r.get('finca', 'N/D'))).strip()
+
+                    nombre_operador = id_operador_raw or "No especificado"
+                    if not df_op_m.empty and id_operador_raw:
+                        for _, row_op in df_op_m.iterrows():
+                            row_str = " ".join([str(val) for val in row_op.values])
+                            if id_operador_raw.upper() in row_str.upper():
+                                posibles_textos = [str(val) for val in row_op.values if len(str(val)) > 5 and not str(val).isdigit() and not str(val).startswith('LIN-') and not str(val).startswith('OP')]
+                                if posibles_textos:
+                                    nombre_operador = posibles_textos[0]
+                                    break
+
+                    nombre_linea = id_linea_raw or "No especificada"
+                    if not df_lin_m.empty and id_linea_raw:
+                        col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
+                        col_nom_lin = next((c for c in df_lin_m.columns if 'razon' in c.lower() or 'nombre' in c.lower()), df_lin_m.columns[1] if len(df_lin_m.columns) > 1 else col_id_lin)
+                        match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.strip().str.upper() == id_linea_raw.strip().upper()]
+                        if not match_lin.empty:
+                            nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
+
+                    desc_tractor = id_tractor_raw or "No especificado"
+                    placas_tractor = "No especificada"
+                    if not df_tr_unif.empty and id_tractor_raw:
+                        col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
+                        match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
+                        if not match_tr.empty:
+                            r_tr = match_tr.iloc[0]
+                            marca = str(r_tr.get('marca', r_tr.get('modelo_tractor', 'Unidad')))
+                            modelo = str(r_tr.get('modelo', r_tr.get('anio', r_tr.get('año', ''))))
+                            eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
+                            partes_tr = [marca]
+                            if modelo and modelo.lower() != 'nan': partes_tr.append(f"mod {modelo}")
+                            if eco and eco.lower() != 'nan': partes_tr.append(f"(Eco: {eco})")
+                            desc_tractor = " ".join(partes_tr)
+                            placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
+
+                    desc_caja = id_caja1_raw or "No especificada"
+                    if not df_cj_unif.empty and id_caja1_raw:
+                        col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
+                        match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.strip().str.upper() == id_caja1_raw.strip().upper()]
+                        if not match_cj.empty:
+                            r_cj = match_cj.iloc[0]
+                            placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
+                            desc_caja = f"Placa: {placa_cj}" if placa_cj else id_caja1_raw
+
+                    st.markdown(
+                        f"""
+                        <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #ffc107; margin-bottom: 15px;'>
+                            <p style='margin: 0; font-weight: bold; color: #856404; font-size: 16px;'>🔍 Datos de la Orden y Transporte:</p>
+                            <hr style='margin: 6px 0;'>
+                            <p style='margin: 4px 0;'><b>🏢 Finca:</b> {finca_origen}</p>
+                            <p style='margin: 4px 0;'><b>👤 Operador:</b> {nombre_operador}</p>
+                            <p style='margin: 4px 0;'><b>🚛 Unidad:</b> {desc_tractor} | <b>Placas:</b> {placas_tractor}</p>
+                            <p style='margin: 4px 0;'><b>📦 Caja:</b> {desc_caja}</p>
+                            <p style='margin: 4px 0;'><b>🏢 Línea de Transporte:</b> {nombre_linea}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                    
+                    c1, c2, c3 = st.columns(3)
+                    with c1: 
+                        new_fac = st.text_input("Número de Factura", value=str(r.get('folio_factura', r.get('factura', ''))), key="efac_h")
+                    with c2: 
+                        new_rem = st.text_input("Número de Remisión", value=str(r.get('remision', '')), key="erem_h")
+                    with c3: 
+                        new_lote = st.text_input("Número de Lote", value=str(r.get('id_lote', r.get('lote', ''))), key="elote_h")
                         
-                        if idx_col("folio_factura"): ws.update_cell(cell.row, idx_col("folio_factura"), new_fac)
-                        if idx_col("remision"): ws.update_cell(cell.row, idx_col("remision"), new_rem)
-                        if idx_col("id_lote"): ws.update_cell(cell.row, idx_col("id_lote"), new_lote)
-                        elif idx_col("lote"): ws.update_cell(cell.row, idx_col("lote"), new_lote)
-                        if idx_col("observaciones"): ws.update_cell(cell.row, idx_col("observaciones"), new_obs)
-                        
-                        st.success("¡Información actualizada correctamente!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al actualizar: {e}")
-# --------------------------------------------------------------------------
+                    new_obs = st.text_area("Observaciones", value=str(r.get('observaciones', '')), key="eobs_h")
+                    
+                    if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                        try:
+                            _, sh, _ = get_db()
+                            ws = sh.worksheet("OrdenesCarga")
+                            cell = ws.find(sel_orden)
+                            headers = [str(h).strip() for h in ws.row_values(1)]
+                            def idx_col(name): return headers.index(name) + 1 if name in headers else None
+                            
+                            if idx_col("folio_factura"): ws.update_cell(cell.row, idx_col("folio_factura"), new_fac)
+                            if idx_col("remision"): ws.update_cell(cell.row, idx_col("remision"), new_rem)
+                            if idx_col("id_lote"): ws.update_cell(cell.row, idx_col("id_lote"), new_lote)
+                            elif idx_col("lote"): ws.update_cell(cell.row, idx_col("lote"), new_lote)
+                            if idx_col("observaciones"): ws.update_cell(cell.row, idx_col("observaciones"), new_obs)
+                            
+                            st.success("¡Información actualizada correctamente!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
+
+    elif menu_sel == "⚙️ Catálogos Maestros":
+        # ... tu código actual de catálogos ...
+        pass
+
+    elif menu_sel == "🗺️ Seguimiento":
+        # ... tu código actual de seguimiento ...
+        pass
+        
+    # --------------------------------------------------------------------------
     # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
     # --------------------------------------------------------------------------
     elif menu_sel == "⚙️ Catálogos Maestros":
