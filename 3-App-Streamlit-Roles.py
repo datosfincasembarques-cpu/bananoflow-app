@@ -477,24 +477,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     st.error(f"Error al procesar la orden: {e}")
 
     # --------------------------------------------------------------------------
-    # 6.2 Submódulo: 📦 Órdenes Expedidas
-    # --------------------------------------------------------------------------
-    elif menu_sel == "📦 Órdenes Expedidas":
-        st.subheader("📦 Órdenes de Carga Registradas")
-        if not df_oc.empty:
-            colm1, colm2, colm3, colm4 = st.columns(4)
-            with colm1: st.metric("Total Órdenes", len(df_oc))
-            with colm2: st.metric("Abiertas", len(df_oc[df_oc['estado'].astype(str).str.upper() == 'ABIERTA']) if 'estado' in df_oc.columns else 0)
-            with colm3: st.metric("En Ruta", len(df_of) if not df_of.empty else 0)
-            with colm4: st.metric("Cerradas", len(df_oc[df_oc['estado'].astype(str).str.upper() == 'CERRADA']) if 'estado' in df_oc.columns else 0)
-            
-            cols_show = [c for c in ["id_orden", "id_operador", "id_tractor", "id_caja1", "id_lote", "folio_factura", "estado", "fecha_creacion"] if c in df_oc.columns]
-            df_show = df_oc.tail(20).iloc[::-1]
-            st.dataframe(df_show[cols_show] if cols_show else df_show, use_container_width=True)
-        else:
-            st.info("No hay órdenes expedidas registradas en este momento.")
-
-# --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura
     # --------------------------------------------------------------------------
     elif menu_sel == "✏️ Remisión/Factura":
@@ -526,7 +508,21 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     id_tractor_raw = str(r.get('id_tractor', r.get('unidad', ''))).strip()
                     id_linea_raw = str(r.get('id_linea', r.get('linea_transporte', ''))).strip()
                     id_caja1_raw = str(r.get('id_caja1', r.get('caja', ''))).strip()
-                    finca_origen = str(r.get('id_finca', r.get('finca', 'N/D'))).strip()
+
+                    # Resolver nombre o ID de la finca
+                    id_finca_raw = str(r.get('id_finca', r.get('finca', r.get('ruta_fincas_ids', 'N/D')))).strip()
+                    nombre_finca = id_finca_raw
+                    
+                    if not df_fin.empty and id_finca_raw and id_finca_raw != 'N/D':
+                        primer_id_finca = id_finca_raw.split(',')[0].strip()
+                        col_id_fin = next((c for c in df_fin.columns if 'id' in c.lower()), df_fin.columns[0])
+                        col_nom_fin = next((c for c in df_fin.columns if 'nombre' in c.lower() or 'razon' in c.lower()), df_fin.columns[1] if len(df_fin.columns) > 1 else col_id_fin)
+                        
+                        match_fin = df_fin[df_fin[col_id_fin].astype(str).str.strip().str.upper() == primer_id_finca.upper()]
+                        if not match_fin.empty:
+                            nombre_finca = str(match_fin.iloc[0].get(col_nom_fin, primer_id_finca))
+                        else:
+                            nombre_finca = primer_id_finca
 
                     nombre_operador = id_operador_raw or "No especificado"
                     if not df_op_m.empty and id_operador_raw:
@@ -576,7 +572,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #ffc107; margin-bottom: 15px;'>
                             <p style='margin: 0; font-weight: bold; color: #856404; font-size: 16px;'>🔍 Datos de la Orden y Transporte:</p>
                             <hr style='margin: 6px 0;'>
-                            <p style='margin: 4px 0;'><b>🏢 Finca:</b> {finca_origen}</p>
+                            <p style='margin: 4px 0;'><b>🏢 Finca:</b> {nombre_finca}</p>
                             <p style='margin: 4px 0;'><b>👤 Operador:</b> {nombre_operador}</p>
                             <p style='margin: 4px 0;'><b>🚛 Unidad:</b> {desc_tractor} | <b>Placas:</b> {placas_tractor}</p>
                             <p style='margin: 4px 0;'><b>📦 Caja:</b> {desc_caja}</p>
@@ -616,13 +612,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.error(f"Error al actualizar: {e}")
 
     elif menu_sel == "⚙️ Catálogos Maestros":
-        # ... tu código actual de catálogos ...
         pass
 
     elif menu_sel == "🗺️ Seguimiento":
-        # ... tu código actual de seguimiento ...
-        pass
-        
+        pass        
     # --------------------------------------------------------------------------
     # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
     # --------------------------------------------------------------------------
