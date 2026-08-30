@@ -898,7 +898,6 @@ elif st.session_state.rol == "VIGILANCIA":
         id_linea_raw = str(info_orden.get('id_linea', '')).strip()
         id_caja1_raw = str(info_orden.get('id_caja1', '')).strip()
 
-        # Traducir Operador a Nombre Completo
         nombre_operador = id_operador_raw or "No especificado"
         if not df_op_m.empty and id_operador_raw:
             for idx, row in df_op_m.iterrows():
@@ -909,7 +908,6 @@ elif st.session_state.rol == "VIGILANCIA":
                         nombre_operador = posibles_textos[0]
                         break
 
-        # Traducir Línea de Transporte
         nombre_linea = id_linea_raw or "No especificado"
         if not df_lin_m.empty and id_linea_raw:
             col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
@@ -918,7 +916,6 @@ elif st.session_state.rol == "VIGILANCIA":
             if not match_lin.empty:
                 nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
 
-        # Traducir Tractor / Unidad, Modelo y Placas
         desc_tractor = id_tractor_raw or "No especificado"
         placas_tractor = "No especificado"
         if not df_tr_unif.empty and id_tractor_raw:
@@ -930,7 +927,6 @@ elif st.session_state.rol == "VIGILANCIA":
                 modelo = str(r_tr.get('modelo', r_tr.get('anio', r_tr.get('año', ''))))
                 eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
                 
-                # Construir descripción detallada incluyendo el modelo si existe
                 partes_tractor = [marca]
                 if modelo and modelo.lower() != 'nan':
                     partes_tractor.append(f"mod {modelo}")
@@ -940,7 +936,6 @@ elif st.session_state.rol == "VIGILANCIA":
                 desc_tractor = " ".join(partes_tractor)
                 placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
 
-        # Traducir Caja 1
         desc_caja1 = id_caja1_raw or "No especificado"
         if not df_cj_unif.empty and id_caja1_raw:
             col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
@@ -950,7 +945,6 @@ elif st.session_state.rol == "VIGILANCIA":
                 placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
                 desc_caja1 = f"Caja Placa: {placa_cj}" if placa_cj else id_caja1_raw
 
-        # Recuadro visual detallado para corroboración en caseta
         st.markdown(
             f"""
             <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #28a745; margin-bottom: 15px;'>
@@ -966,36 +960,30 @@ elif st.session_state.rol == "VIGILANCIA":
             unsafe_allow_html=True
         )
 
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 5px;'>¿Coincide la Placa / Guía Física en la Unidad?</p>", unsafe_allow_html=True)
+        # Diseño Futurista: Interruptor / Toggle Deslizable para Validación
+        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚙️ Panel de Validación Biométrica / Física:</p>", unsafe_allow_html=True)
         
-        estado_verificacion = st.session_state.get("placa_verificada_estado", "SI")
-
-        cols_btn = st.columns(2)
-        with cols_btn[0]:
-            tipo_btn_si = "primary" if estado_verificacion == "SI" else "secondary"
-            if st.button("🟢 SÍ - COINCIDE", use_container_width=True, type=tipo_btn_si, key="btn_placa_si_ent"):
-                st.session_state["placa_verificada_estado"] = "SI"
-                st.rerun()
-        with cols_btn[1]:
-            tipo_btn_no = "primary" if estado_verificacion == "NO" else "secondary"
-            if st.button("🔴 NO - DIFERENTE", use_container_width=True, type=tipo_btn_no, key="btn_placa_no_ent"):
-                st.session_state["placa_verificada_estado"] = "NO"
-                st.rerun()
+        val_coincide_ent = st.toggle("🟢 **¿Coincide la Placa / Guía Física?** (Activo = SÍ / Inactivo = NO)", value=True, key="toggle_coincide_ent")
+        estado_verificacion = "SI" if val_coincide_ent else "NO"
 
         if estado_verificacion == "SI":
-            st.success("✅ Verificación aprobada: Las placas físicas coinciden con el registro.")
+            st.markdown("<div style='padding: 8px; background: rgba(40,167,69,0.1); border-left: 4px solid #28a745; border-radius: 4px; color: #155724; font-size: 13px; font-weight: 600;'>🟢 ESTADO: COINCIDENCIA CONFIRMADA (FLUJO SEGURO)</div>", unsafe_allow_html=True)
         else:
-            st.warning("⚠️ Indicó que las placas no coinciden. El registro se guardará con la observación de discrepancia.")
-        
+            st.markdown("<div style='padding: 8px; background: rgba(217,83,79,0.1); border-left: 4px solid #d9534f; border-radius: 4px; color: #721c24; font-size: 13px; font-weight: 600;'>🔴 ESTADO: DISCREPANCIA DETECTADA (REGISTRO CON ALERTA)</div>", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
         foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE", key="vis_foto_tractor_rol")
         foto_caja = st.camera_input("📷 FOTO 2 - CAJA TRASERA", key="vis_foto_caja_rol")
         
         if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_rol"):
             try:
                 _, sh, _ = get_db()
-                try:
+                
+                # Creación segura controlando hojas existentes
+                nombres_hojas = [w.title for w in sh.worksheets()]
+                if "vigilancia_registro" in nombres_hojas:
                     ws_v = sh.worksheet("vigilancia_registro")
-                except Exception:
+                else:
                     ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
                 
                 if not ws_v.get_all_values():
@@ -1065,36 +1053,27 @@ elif st.session_state.rol == "VIGILANCIA":
             unsafe_allow_html=True
         )
 
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 5px;'>¿Coincide la Placa / Guía Física de Salida?</p>", unsafe_allow_html=True)
-
-        estado_verificacion_sal = st.session_state.get("placa_verificada_salida", "SI")
-
-        cols_btn_sal = st.columns(2)
-        with cols_btn_sal[0]:
-            tipo_btn_sal_si = "primary" if estado_verificacion_sal == "SI" else "secondary"
-            if st.button("🟢 SÍ - COINCIDE", use_container_width=True, type=tipo_btn_sal_si, key="btn_placa_si_sal"):
-                st.session_state["placa_verificada_salida"] = "SI"
-                st.rerun()
-        with cols_btn_sal[1]:
-            tipo_btn_sal_no = "primary" if estado_verificacion_sal == "NO" else "secondary"
-            if st.button("🔴 NO - DIFERENTE", use_container_width=True, type=tipo_btn_sal_no, key="btn_placa_no_sal"):
-                st.session_state["placa_verificada_salida"] = "NO"
-                st.rerun()
+        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚙️ Panel de Validación de Salida:</p>", unsafe_allow_html=True)
+        val_coincide_sal = st.toggle("🟢 **¿Coincide la Placa / Guía de Salida?** (Activo = SÍ / Inactivo = NO)", value=True, key="toggle_coincide_sal")
+        estado_verificacion_sal = "SI" if val_coincide_sal else "NO"
 
         if estado_verificacion_sal == "SI":
-            st.success("✅ Verificación de salida aprobada.")
+            st.markdown("<div style='padding: 8px; background: rgba(40,167,69,0.1); border-left: 4px solid #28a745; border-radius: 4px; color: #155724; font-size: 13px; font-weight: 600;'>🟢 ESTADO: SALIDA AUTORIZADA (CONFORME)</div>", unsafe_allow_html=True)
         else:
-            st.warning("⚠️ Indicó que las placas de salida no coinciden. El registro se guardará con la observación de discrepancia.")
-        
+            st.markdown("<div style='padding: 8px; background: rgba(217,83,79,0.1); border-left: 4px solid #d9534f; border-radius: 4px; color: #721c24; font-size: 13px; font-weight: 600;'>🔴 ESTADO: SALIDA CON OBSERVACIÓN DE DISCREPANCIA</div>", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
         foto_tr_sal = st.camera_input("📷 FOTO SALIDA - TRACTOR FRENTE", key="vis_foto_tr_sal_rol")
         foto_cj_sal = st.camera_input("📷 FOTO SALIDA - CAJA TRASERA", key="vis_foto_cj_sal_rol")
         
         if st.button("🚀 GUARDAR SALIDA", type="primary", use_container_width=True, key="btn_guardar_salida_rol"):
             try:
                 _, sh, _ = get_db()
-                try:
+                
+                nombres_hojas = [w.title for w in sh.worksheets()]
+                if "vigilancia_registro" in nombres_hojas:
                     ws_v = sh.worksheet("vigilancia_registro")
-                except Exception:
+                else:
                     ws_v = sh.add_worksheet(title="vigilancia_registro", rows=1000, cols=20)
                 
                 if not ws_v.get_all_values():
