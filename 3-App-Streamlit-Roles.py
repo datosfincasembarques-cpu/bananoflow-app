@@ -216,7 +216,7 @@ with st.sidebar:
         
         if st.session_state.rol == "OFICINA_CENTRAL":
             st.markdown("### 📌 Navegación")
-            menu = st.radio("Menú Oficina", ["📦 Crear Orden", "📦 Órdenes Expedidas", "✏️ Remisión/Factura", "🗺️ Seguimiento"], key="radio_menu_oficina")
+            menu = st.radio("Menú Oficina", ["📦 Crear Orden", "📦 Órdenes Expedidas", "✏️ Remisión/Factura", "⚙️ Catálogos Maestros", "🗺️ Seguimiento"], key="radio_menu_oficina")
             st.session_state.menu_oficina = menu
             
         st.divider()
@@ -309,7 +309,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
     # --------------------------------------------------------------------------
-    # 6.1 Submódulo: 📦 Crear Orden (Con Buffer de Memoria Anti-Pérdida)
+    # 6.1 Submódulo: 📦 Crear Orden
     # --------------------------------------------------------------------------
     if menu_sel == "📦 Crear Orden":
         st.subheader("📝 Generación de Nueva Orden de Carga")
@@ -374,6 +374,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             tr_data = tr_mapa_placa.get(tr_placa_sel, {})
             id_tr = str(tr_data.get('id_tractor', '') or tr_placa_sel)
             placa_str = str(tr_data.get('placas', '') or tr_placa_sel)
+            eco_tr = str(tr_data.get('numero_economico', '') or tr_data.get('economico', '') or tr_data.get('num_economico', '') or '')
             
             id_lin = str(tr_data.get('id_linea', '')).strip()
             lin_nombre_str = id_lin
@@ -385,6 +386,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             st.text_input("ID Tracto", value=id_tr, disabled=True, key="id_tr_hibrido")
             st.text_input("Placas", value=placa_str, disabled=True, key="placa_tr_hibrido")
+            st.text_input("N° Económico", value=eco_tr, disabled=True, key="eco_tr_hibrido")
             st.text_input("Línea de Transporte", value=lin_nombre_str, disabled=True, key="linea_tr_hibrido")
 
         with ct2:
@@ -392,8 +394,11 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             cj1_placa_sel = st.selectbox("Placa Caja1", cj_placas if cj_placas else ["No hay"], key="cj1_placa_hibrido", label_visibility="collapsed")
             cj1_data = cj_mapa_placa.get(cj1_placa_sel, {})
             id_cj1 = str(cj1_data.get('id_caja', '') or cj1_placa_sel)
+            eco_cj1 = str(cj1_data.get('numero_economico', '') or cj1_data.get('economico', '') or cj1_data.get('num_economico', '') or '')
+            
             st.text_input("ID Caja1", value=id_cj1, disabled=True, key="id_cj1_hibrido")
             st.text_input("Placa Caja1", value=str(cj1_data.get('placas', '') or cj1_placa_sel), disabled=True, key="placa_cj1_hibrido")
+            st.text_input("N° Económico Caja 1", value=eco_cj1, disabled=True, key="eco_cj1_hibrido")
             st.markdown("")
 
         with ct3:
@@ -402,8 +407,11 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cj2_placa_sel = st.selectbox("Caja2", cj_placas if cj_placas else ["No hay"], key="cj2_placa_hibrido", label_visibility="collapsed")
                 cj2_data = cj_mapa_placa.get(cj2_placa_sel, {})
                 id_cj2 = str(cj2_data.get('id_caja', '') or cj2_placa_sel)
+                eco_cj2 = str(cj2_data.get('numero_economico', '') or cj2_data.get('economico', '') or cj2_data.get('num_economico', '') or '')
+                
                 st.text_input("ID Caja2", value=id_cj2, disabled=True, key="id_cj2_hibrido")
                 st.text_input("Placa Caja2", value=str(cj2_data.get('placas', '') or cj2_placa_sel), disabled=True, key="placa_cj2_hibrido")
+                st.text_input("N° Económico Caja 2", value=eco_cj2, disabled=True, key="eco_cj2_hibrido")
             else:
                 id_cj2 = ""
                 st.markdown("**Caja 2 (Sencillo)**")
@@ -437,7 +445,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 try:
                     _, sh, _ = get_db()
-                    
                     id_orden = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op}"
                     ws_ord = sh.worksheet("OrdenesCarga")
                     
@@ -449,39 +456,21 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     ])
                     
                     row = {
-                        "id_orden": id_orden,
-                        "folio_orden": id_orden,
-                        "fecha_creacion": datetime.now().isoformat(),
-                        "id_usuario_crea": st.session_state.username,
-                        "id_operador": id_op,
-                        "id_tractor": id_tr,
-                        "id_caja1": id_cj1,
-                        "id_caja2": id_cj2,
-                        "id_linea": id_lin,
-                        "id_cliente": id_cli,
-                        "id_destino": id_des,
-                        "id_lote": lote_val if lote_val else f"LOTE-{id_orden}",
-                        "folio_factura": fac_val,
-                        "estado": "ABIERTA",
-                        "observaciones": obs_val,
-                        "ruta_fincas_ids": ",".join(ids_fin_ruta)
+                        "id_orden": id_orden, "folio_orden": id_orden, "fecha_creacion": datetime.now().isoformat(),
+                        "id_usuario_crea": st.session_state.username, "id_operador": id_op, "id_tractor": id_tr,
+                        "id_caja1": id_cj1, "id_caja2": id_cj2, "id_linea": id_lin, "id_cliente": id_cli,
+                        "id_destino": id_des, "id_lote": lote_val if lote_val else f"LOTE-{id_orden}",
+                        "folio_factura": fac_val, "estado": "ABIERTA", "observaciones": obs_val, "ruta_fincas_ids": ",".join(ids_fin_ruta)
                     }
                     
                     if append_row_dict_safe(ws_ord, row):
                         ws_ruta = sh.worksheet("Orden_Fincas")
-                        
                         ensure_columns_exist(ws_ruta, ["id", "id_orden", "id_finca", "orden_visita", "estado_carga", "cajas_asignadas"])
-                        
                         for idx, fid in enumerate(ids_fin_ruta):
                             append_row_dict_safe(ws_ruta, {
-                                "id": f"{id_orden}-{fid}", 
-                                "id_orden": id_orden, 
-                                "id_finca": fid, 
-                                "orden_visita": idx + 1, 
-                                "estado_carga": "PENDIENTE",
-                                "cajas_asignadas": ""
+                                "id": f"{id_orden}-{fid}", "id_orden": id_orden, "id_finca": fid, 
+                                "orden_visita": idx + 1, "estado_carga": "PENDIENTE", "cajas_asignadas": ""
                             })
-                            
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
@@ -503,7 +492,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             df_show = df_oc.tail(20).iloc[::-1]
             st.dataframe(df_show[cols_show] if cols_show else df_show, use_container_width=True)
         else:
-            st.info("No hay órdenes expedidas registradas en este momento (o sin conexión para cargarlas).")
+            st.info("No hay órdenes expedidas registradas en este momento.")
 
     # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura
@@ -523,7 +512,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     c1, c2 = st.columns(2)
                     with c1: new_fac = st.text_input("Factura", value=str(r.get('folio_factura', '')), key="efac_h")
                     with c2: new_lote = st.text_input("Lote", value=str(r.get('id_lote', '')), key="elote_h")
-                    
                     new_obs = st.text_area("Observaciones", value=str(r.get('observaciones', '')), key="eobs_h")
                     
                     if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
@@ -541,10 +529,110 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.success("¡Información actualizada correctamente!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Error al actualizar por fallo de red: {e}")
+                            st.error(f"Error al actualizar: {e}")
 
     # --------------------------------------------------------------------------
-    # 6.4 Submódulo: 🗺️ Seguimiento
+    # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
+    # --------------------------------------------------------------------------
+    elif menu_sel == "⚙️ Catálogos Maestros":
+        st.subheader("⚙️ Administración de Catálogos Maestros")
+        st.caption("Visualiza, edita, agrega o elimina registros de las tablas maestras de Google Sheets.")
+        
+        catalogo_sel = st.selectbox("Seleccione el Catálogo a Administrar", [
+            "Tractos", "Cajas", "Operadores", "LineasTransporte", "Fincas", "Clientes", "Destinos", "Empresas"
+        ], key="cat_maestro_sel")
+        
+        df_cat, _ = get_df_safe(catalogo_sel)
+        
+        tab_ver, tab_agregar, tab_editar_eliminar = st.tabs(["📋 Ver Registros", "➕ Agregar Nuevo", "✏️ / 🗑️ Editar o Eliminar"])
+        
+        with tab_ver:
+            st.markdown(f"**Registros actuales en `{catalogo_sel}`** (Total: {len(df_cat)})")
+            if not df_cat.empty:
+                st.dataframe(df_cat, use_container_width=True)
+            else:
+                st.info("El catálogo está vacío o no se pudo cargar.")
+                
+        with tab_agregar:
+            st.markdown(f"**Agregar un nuevo registro a `{catalogo_sel}`**")
+            if not df_cat.empty:
+                cols_cat = list(df_cat.columns)
+            else:
+                cols_cat = ["id", "nombre"]
+                
+            with st.form(key=f"form_agregar_{catalogo_sel}"):
+                nuevos_datos = {}
+                for col in cols_cat:
+                    nuevos_datos[col] = st.text_input(f"Campo: {col}", key=f"add_{catalogo_sel}_{col}")
+                
+                btn_guardar_nuevo = st.form_submit_button("💾 Guardar Registro en Google Sheets", type="primary")
+                if btn_guardar_nuevo:
+                    try:
+                        _, sh, _ = get_db()
+                        ws = sh.worksheet(catalogo_sel)
+                        if append_row_dict_safe(ws, nuevos_datos):
+                            st.success(f"✅ ¡Registro agregado exitosamente a `{catalogo_sel}`!")
+                            time.sleep(1)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al agregar registro: {e}")
+                        
+        with tab_editar_eliminar:
+            st.markdown(f"**Modificar o Eliminar registros en `{catalogo_sel}`**")
+            if df_cat.empty:
+                st.info("No hay registros disponibles para modificar.")
+            else:
+                col_id_cat = df_cat.columns[0]
+                lista_ids = df_cat[col_id_cat].astype(str).tolist()
+                id_a_modificar = st.selectbox(f"Seleccione por `{col_id_cat}`", lista_ids, key=f"sel_mod_{catalogo_sel}")
+                
+                fila_match = df_cat[df_cat[col_id_cat].astype(str) == str(id_a_modificar)]
+                if not fila_match.empty:
+                    datos_fila = fila_match.iloc[0].to_dict()
+                    
+                    with st.form(key=f"form_mod_{catalogo_sel}"):
+                        st.markdown(f"Editando registro: **{id_a_modificar}**")
+                        datos_editados = {}
+                        for k, v in datos_fila.items():
+                            datos_editados[k] = st.text_input(f"Modificar {k}", value=str(v), key=f"edit_{catalogo_sel}_{k}")
+                        
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            btn_actualizar = st.form_submit_button("💾 Actualizar Cambios", type="primary")
+                        with col_btn2:
+                            btn_eliminar = st.form_submit_button("🗑️ Eliminar Registro", type="secondary")
+                            
+                        if btn_actualizar:
+                            try:
+                                _, sh, _ = get_db()
+                                ws = sh.worksheet(catalogo_sel)
+                                cell = ws.find(str(id_a_modificar))
+                                headers = [str(h).strip() for h in ws.row_values(1)]
+                                
+                                for k, val in datos_editados.items():
+                                    if k in headers:
+                                        idx = headers.index(k) + 1
+                                        ws.update_cell(cell.row, idx, val)
+                                st.success("✅ ¡Registro actualizado correctamente!")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al actualizar: {e}")
+                                
+                        if btn_eliminar:
+                            try:
+                                _, sh, _ = get_db()
+                                ws = sh.worksheet(catalogo_sel)
+                                cell = ws.find(str(id_a_modificar))
+                                ws.delete_rows(cell.row)
+                                st.success("🗑️ ¡Registro eliminado correctamente de la base de datos!")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al eliminar: {e}")
+
+    # --------------------------------------------------------------------------
+    # 6.5 Submódulo: 🗺️ Seguimiento
     # --------------------------------------------------------------------------
     elif menu_sel == "🗺️ Seguimiento":
         st.subheader("🗺️ Seguimiento General de Órdenes por Finca")
