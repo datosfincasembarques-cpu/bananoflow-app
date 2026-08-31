@@ -315,25 +315,28 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         st.subheader("📝 Generación de Nueva Orden de Carga")
         
         df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
-        df_fincas_propias = df_fincas_emp[df_fincas_emp['tipo'].astype(str).str.upper() == 'PROPIA'] if not df_fincas_emp.empty and 'tipo' in df_fincas_emp.columns else df_fincas_emp
-        fin_prop_nombres, fin_prop_mapa = lista_simple_no_concat(df_fincas_propias, "id_finca", "nombre")
         fin_todos_nombres, fin_todos_mapa = lista_simple_no_concat(df_fin, "id_finca", "nombre")
         ops_nombres, ops_mapa = lista_simple_no_concat(df_op, "id_operador", "nombre")
 
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            st.markdown("**Finca Titular Guía (PROPIA)**")
-            fin_guia_sel = st.selectbox("Finca PROPIA", fin_prop_nombres if fin_prop_nombres else fin_todos_nombres, key="fin_guia_hibrido")
-            fin_guia_data = fin_prop_mapa.get(fin_guia_sel, {}) or fin_todos_mapa.get(fin_guia_sel, {})
-            id_fin_guia = str(fin_guia_data.get('id_finca', '') or fin_guia_sel)
-            st.text_input("ID Finca Guía", value=id_fin_guia, disabled=True, key="id_fin_guia_hibrido")
-        with col_f2:
-            st.markdown("**Ruta de Carga (Fincas participantes)**")
-            fin_ruta_sel = st.multiselect("Fincas donde cargará", fin_todos_nombres, key="fin_ruta_hibrido")
-            ids_fin_ruta = []
-            for fn in fin_ruta_sel:
-                d = fin_todos_mapa.get(fn, {})
-                ids_fin_ruta.append(str(d.get('id_finca', '') or fn))
+        # Generación del ID / Folio de orden de forma dinámica y visual
+        try:
+            _, sh_id, _ = get_db()
+            ws_ord_id = sh_id.worksheet("OrdenesCarga")
+            all_ords = ws_ord_id.get_all_records()
+            next_num = len(all_ords) + 1
+            id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d')}-{next_num:03d}"
+        except Exception:
+            id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op if id_op else 'OP'}"
+
+        st.info(f"🏷️ **Folio de la Orden Asignado (Próximo a emitir):** `{id_orden_temp}`")
+
+        # Únicamente dejamos la Ruta de Carga arriba, eliminando el bloque redundante de "Finca Titular Guía (PROPIA)"
+        st.markdown("**Ruta de Carga (Fincas participantes)**")
+        fin_ruta_sel = st.multiselect("Fincas donde cargará", fin_todos_nombres, key="fin_ruta_hibrido")
+        ids_fin_ruta = []
+        for fn in fin_ruta_sel:
+            d = fin_todos_mapa.get(fn, {})
+            ids_fin_ruta.append(str(d.get('id_finca', '') or fn))
 
         st.markdown("#### 👤 Operador Asignado")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
@@ -436,12 +439,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             
         obs_val = st.text_area("Observaciones Generales", key="obs_hibrido")
 
-        # Generación del ID de Orden previo para mostrarlo claramente en pantalla
-        id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op if id_op else 'OP'}"
-
-        st.markdown("---")
-        st.info(f"🏷️ **Folio de Orden en Creación:** `{id_orden_temp}`")
-
         # --------------------------------------------------------------------------
         # Integración: Guía Fitosanitaria (Después de documentación y destino)
         # --------------------------------------------------------------------------
@@ -460,8 +457,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
                 st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
             with cg2:
-                # Fila superior de la sección general con todas las fincas (sin alterar)
-                # Pero aquí para la Guía Fitosanitaria aplicamos el filtro estricto por empresa:
+                # Filtrado exclusivo por empresa activa principal para la finca emisora de la guía
                 df_fincas_empresa = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
                 fincas_empresa_nombres, fincas_empresa_mapa = lista_simple_no_concat(df_fincas_empresa, "id_finca", "nombre")
                 
@@ -595,7 +591,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
-                    st.error(f"Error al procesar la orden: {e}")                    
+                    st.error(f"Error al procesar la orden: {e}")
+
+    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
