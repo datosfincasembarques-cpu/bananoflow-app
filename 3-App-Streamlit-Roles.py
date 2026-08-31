@@ -335,82 +335,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 d = fin_todos_mapa.get(fn, {})
                 ids_fin_ruta.append(str(d.get('id_finca', '') or fn))
 
-        # --------------------------------------------------------------------------
-        # Integración: Guía Fitosanitaria (Finca específica, cajas y 4 documentos)
-        # --------------------------------------------------------------------------
-        st.markdown("#### 📜 Asignación de Guía Fitosanitaria")
-        lleva_guia = st.toggle("¿Esta orden de carga incluye Guía Fitosanitaria?", value=False, key="toggle_lleva_guia")
-        
-        id_guia_asignada_sel = ""
-        folios_asignados_detalle = {}
-        cajas_guia = 0
-        finca_guia_sel = ""
-        id_fin_guia_emision = ""
-        
-        if lleva_guia:
-            cg1, cg2 = st.columns(2)
-            with cg1:
-                cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
-                st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
-            with cg2:
-                fincas_empresa_lista = [f['nombre'] for f in fincas_data if str(f.get('id_empresa', '')).upper() == id_emp_principal.upper()] if 'fincas_data' in locals() else fin_prop_nombres
-                finca_guia_sel = st.selectbox("Finca Emisora de la Guía (Individual)", fincas_empresa_lista if fincas_empresa_lista else fin_prop_nombres, key="sel_finca_guia")
-                
-                finca_guia_data = next((f for f in fincas_data if f.get('nombre') == finca_guia_sel), {}) if 'fincas_data' in locals() else {}
-                id_fin_guia_emision = str(finca_guia_data.get('id_finca', '') or finca_guia_sel)
-
-            df_compras_guias, _ = get_df_safe("Compra_Guias")
-            df_stock_folios, _ = get_df_safe("Guias_Folios_Stock")
-            
-            if df_compras_guias.empty:
-                st.warning("⚠️ No hay compras de guías registradas en el sistema. Debe registrar una compra en el módulo '📜 Compra y Guías'.")
-            else:
-                lotes_empresa = df_compras_guias[df_compras_guias['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras_guias.columns else df_compras_guias
-                lotes_activos = lotes_empresa[lotes_empresa['estado'].astype(str).str.upper() == 'ACTIVO'] if not lotes_empresa.empty and 'estado' in lotes_empresa.columns else lotes_empresa
-                
-                if lotes_activos.empty:
-                    st.warning("⚠️ No hay lotes de guías con estatus ACTIVO para esta empresa.")
-                else:
-                    lote_opciones = lotes_activos.apply(lambda r: f"Lote: {r['id_compra']} | AAPS: {r.get('folio_compra_AAPS', 'N/D')}", axis=1).tolist()
-                    lote_sel_str = st.selectbox("Seleccione el Lote de Guías", lote_opciones, key="sel_lote_guia")
-                    
-                    id_compra_elegida = lote_sel_str.split("|")[0].replace("Lote:", "").strip()
-                    id_guia_asignada_sel = id_compra_elegida
-                    
-                    if not df_stock_folios.empty:
-                        folios_lote_disp = df_stock_folios[
-                            (df_stock_folios['id_compra'].astype(str) == id_compra_elegida) & 
-                            (df_stock_folios['estado'].astype(str).str.upper() == 'DISPONIBLE')
-                        ]
-                        
-                        if folios_lote_disp.empty:
-                            st.error("❌ Este lote ya no cuenta con folios disponibles en stock.")
-                        else:
-                            st.markdown("##### 📄 Folios asignados de los 4 documentos para esta guía:")
-                            tipos_docs_req = [
-                                "Certificado de Origen",
-                                "Constancia de Origen",
-                                "Constancia de Clorinacion",
-                                "Carta Responsiva"
-                            ]
-                            
-                            col_f1, col_f2 = st.columns(2)
-                            idx_col = 0
-                            for doc_t in tipos_docs_req:
-                                folios_doc_tipo = folios_lote_disp[folios_lote_disp['tipo_documento'].astype(str) == doc_t]
-                                if not folios_doc_tipo.empty:
-                                    lista_f_disponibles = folios_doc_tipo['folio'].tolist()
-                                    with (col_f1 if idx_col % 2 == 0 else col_f2):
-                                        folio_elegido = st.selectbox(f"{doc_t}", lista_f_disponibles, key=f"sel_folio_{doc_t}")
-                                        folios_asignados_detalle[doc_t] = folio_elegido
-                                else:
-                                    with (col_f1 if idx_col % 2 == 0 else col_f2):
-                                        st.warning(f"Sin stock para {doc_t}")
-                                        folios_asignados_detalle[doc_t] = ""
-                                idx_col += 1
-        else:
-            st.info("ℹ️ La orden se procesará sin Guía Fitosanitaria.")
-
         st.markdown("#### 👤 Operador Asignado")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         with c1:
@@ -512,6 +436,91 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             
         obs_val = st.text_area("Observaciones Generales", key="obs_hibrido")
 
+        # Generación del ID de Orden previo para mostrarlo claramente en pantalla
+        id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op if id_op else 'OP'}"
+
+        st.markdown("---")
+        st.info(fol_info_str := f"🏷️ **Folio de Orden en Creación:** `{id_orden_temp}`")
+
+        # --------------------------------------------------------------------------
+        # Integración: Guía Fitosanitaria (Después de documentación y destino)
+        # --------------------------------------------------------------------------
+        st.markdown("#### 📜 Asignación de Guía Fitosanitaria y Conciliación Física")
+        lleva_guia = st.toggle("¿Esta orden de carga incluye Guía Fitosanitaria?", value=False, key="toggle_lleva_guia")
+        
+        id_guia_asignada_sel = ""
+        folios_asignados_detalle = {}
+        cajas_guia = 0
+        finca_guia_sel = ""
+        id_fin_guia_emision = ""
+        
+        if lleva_guia:
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
+                st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
+            with cg2:
+                fincas_empresa_lista = [f['nombre'] for f in fincas_data if str(f.get('id_empresa', '')).upper() == id_emp_principal.upper()] if 'fincas_data' in locals() else fin_prop_nombres
+                finca_guia_sel = st.selectbox("Finca Emisora de la Guía (Individual)", fincas_empresa_lista if fincas_empresa_lista else fin_prop_nombres, key="sel_finca_guia")
+                
+                finca_guia_data = next((f for f in fincas_data if f.get('nombre') == finca_guia_sel), {}) if 'fincas_data' in locals() else {}
+                id_fin_guia_emision = str(finca_guia_data.get('id_finca', '') or finca_guia_sel)
+
+            df_compras_guias, _ = get_df_safe("Compra_Guias")
+            df_stock_folios, _ = get_df_safe("Guias_Folios_Stock")
+            
+            if df_compras_guias.empty:
+                st.warning("⚠️ No hay compras de guías registradas en el sistema. Debe registrar una compra en el módulo '📜 Compra y Guías'.")
+            else:
+                lotes_empresa = df_compras_guias[df_compras_guias['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras_guias.columns else df_compras_guias
+                lotes_activos = lotes_empresa[lotes_empresa['estado'].astype(str).str.upper() == 'ACTIVO'] if not lotes_empresa.empty and 'estado' in lotes_empresa.columns else lotes_empresa
+                
+                if lotes_activos.empty:
+                    st.warning("⚠️ No hay lotes de guías con estatus ACTIVO para esta empresa.")
+                else:
+                    lote_opciones = lotes_activos.apply(lambda r: f"Lote: {r['id_compra']} | AAPS: {r.get('folio_compra_AAPS', 'N/D')}", axis=1).tolist()
+                    lote_sel_str = st.selectbox("Seleccione el Lote de Guías", lote_opciones, key="sel_lote_guia")
+                    
+                    id_compra_elegida = lote_sel_str.split("|")[0].replace("Lote:", "").strip()
+                    id_guia_asignada_sel = id_compra_elegida
+                    
+                    if not df_stock_folios.empty:
+                        folios_lote_disp = df_stock_folios[
+                            (df_stock_folios['id_compra'].astype(str) == id_compra_elegida) & 
+                            (df_stock_folios['estado'].astype(str).str.upper() == 'DISPONIBLE')
+                        ]
+                        
+                        if folios_lote_disp.empty:
+                            st.error("❌ Este lote ya no cuenta con folios disponibles en stock.")
+                        else:
+                            st.markdown("##### 🔍 Conciliación de Folios en Físico (4 Documentos Requeridos):")
+                            st.caption("Verifique visualmente los documentos impresos y seleccione el folio correspondiente para asociarlo a esta orden.")
+                            
+                            tipos_docs_req = [
+                                "Certificado de Origen",
+                                "Constancia de Origen",
+                                "Constancia de Clorinacion",
+                                "Carta Responsiva"
+                            ]
+                            
+                            col_f1, col_f2 = st.columns(2)
+                            idx_col = 0
+                            for doc_t in tipos_docs_req:
+                                folios_doc_tipo = folios_lote_disp[folios_lote_disp['tipo_documento'].astype(str) == doc_t]
+                                if not folios_doc_tipo.empty:
+                                    lista_f_disponibles = folios_doc_tipo['folio'].tolist()
+                                    with (col_f1 if idx_col % 2 == 0 else col_f2):
+                                        folio_elegido = st.selectbox(f"📄 {doc_t} (Físico)", lista_f_disponibles, key=f"sel_folio_{doc_t}")
+                                        folios_asignados_detalle[doc_t] = folio_elegido
+                                        st.caption(f"Folio seleccionado para conciliar: **{folio_elegido}**")
+                                else:
+                                    with (col_f1 if idx_col % 2 == 0 else col_f2):
+                                        st.warning(f"Sin stock para {doc_t}")
+                                        folios_asignados_detalle[doc_t] = ""
+                                idx_col += 1
+        else:
+            st.info("ℹ️ La orden se procesará sin Guía Fitosanitaria.")
+
         st.markdown("---")
         if st.button("🚀 GENERAR Y EXPEDIR ORDEN DE CARGA", type="primary", use_container_width=True):
             if not fin_ruta_sel:
@@ -521,7 +530,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 try:
                     _, sh, _ = get_db()
-                    id_orden = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op}"
+                    id_orden = id_orden_temp
                     ws_ord = sh.worksheet("OrdenesCarga")
                     
                     ensure_columns_exist(ws_ord, [
@@ -575,8 +584,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
-                    st.error(f"Error al procesar la orden: {e}")
-                    
+                    st.error(f"Error al procesar la orden: {e}")                    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
