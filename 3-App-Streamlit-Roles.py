@@ -312,6 +312,18 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     # 6.1 Submódulo: 📦 Crear Orden
     # --------------------------------------------------------------------------
     if menu_sel == "📦 Crear Orden":
+        # Inyección de estilo global para forzar la tipografía Arial en todo el submódulo
+        st.markdown(
+            """
+            <style>
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stToggle {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
         st.subheader("📝 Generación de Nueva Orden de Carga")
         
         df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
@@ -328,10 +340,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         except Exception:
             id_orden_temp = f"OC-1"
 
-        # Visualización limpia dividida en dos etiquetas independientes con tamaño destacado
+        # Visualización limpia dividida en dos etiquetas independientes con tamaño destacado y Arial
         st.markdown(
             f"""
-            <div style="padding: 10px 0px;">
+            <div style="padding: 10px 0px; font-family: Arial, sans-serif;">
                 <span style="font-size: 14px; font-weight: normal; color: #555;">Folio:</span><br>
                 <span style="font-size: 22px; font-weight: bold; color: #1f77b4;">{id_orden_temp}</span>
             </div>
@@ -466,7 +478,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
                 st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
             with cg2:
-                # Filtrado exclusivo por empresa activa principal para la finca emisora de la guía
+                # Filtrado exclusivo por empresa activa principal para la finca emisora de la guía (Asegurando que cambie acorde a la empresa seleccionada)
                 df_fincas_empresa = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
                 fincas_empresa_nombres, fincas_empresa_mapa = lista_simple_no_concat(df_fincas_empresa, "id_finca", "nombre")
                 
@@ -600,8 +612,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
-                    st.error(f"Error al procesar la orden: {e}")
-    
+                    st.error(f"Error al procesar la orden: {e}")    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
