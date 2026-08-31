@@ -308,7 +308,183 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     st.markdown("---")
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
-if not df_stock_folios.empty:
+# --------------------------------------------------------------------------
+    # 6.1 Submódulo: 📦 Crear Orden
+    # --------------------------------------------------------------------------
+    if menu_sel == "📦 Crear Orden":
+        st.subheader("📝 Generación de Nueva Orden de Carga")
+        
+        df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
+        df_fincas_propias = df_fincas_emp[df_fincas_emp['tipo'].astype(str).str.upper() == 'PROPIA'] if not df_fincas_emp.empty and 'tipo' in df_fincas_emp.columns else df_fincas_emp
+        fin_prop_nombres, fin_prop_mapa = lista_simple_no_concat(df_fincas_propias, "id_finca", "nombre")
+        fin_todos_nombres, fin_todos_mapa = lista_simple_no_concat(df_fin, "id_finca", "nombre")
+        ops_nombres, ops_mapa = lista_simple_no_concat(df_op, "id_operador", "nombre")
+
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            st.markdown("**Finca Titular Guía (PROPIA)**")
+            fin_guia_sel = st.selectbox("Finca PROPIA", fin_prop_nombres if fin_prop_nombres else fin_todos_nombres, key="fin_guia_hibrido")
+            fin_guia_data = fin_prop_mapa.get(fin_guia_sel, {}) or fin_todos_mapa.get(fin_guia_sel, {})
+            id_fin_guia = str(fin_guia_data.get('id_finca', '') or fin_guia_sel)
+            st.text_input("ID Finca Guía", value=id_fin_guia, disabled=True, key="id_fin_guia_hibrido")
+        with col_f2:
+            st.markdown("**Ruta de Carga (Fincas participantes)**")
+            fin_ruta_sel = st.multiselect("Fincas donde cargará", fin_todos_nombres, key="fin_ruta_hibrido")
+            ids_fin_ruta = []
+            for fn in fin_ruta_sel:
+                d = fin_todos_mapa.get(fn, {})
+                ids_fin_ruta.append(str(d.get('id_finca', '') or fn))
+
+        st.markdown("#### 👤 Operador Asignado")
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+        with c1:
+            st.markdown("**Nombre Operador**")
+            op_sel = st.selectbox("Nombre Operador", ops_nombres if ops_nombres else ["No hay operadores"], key="op_hibrido", label_visibility="collapsed")
+            op_data = ops_mapa.get(op_sel, {})
+            id_op = str(op_data.get('id_operador', '') or op_sel)
+        with c2: 
+            st.markdown("**ID Op**")
+            st.text_input("ID Op", value=id_op, disabled=True, key="id_op_hibrido", label_visibility="collapsed")
+        with c3: 
+            st.markdown("**Licencia**")
+            lic_val = str(op_data.get('licencia_num', '') or op_data.get('licencia', ''))
+            st.text_input("Licencia", value=lic_val, disabled=True, key="lic_hibrido", label_visibility="collapsed")
+        with c4: 
+            st.markdown("**Teléfono**")
+            tel_val = str(op_data.get('telefono', ''))
+            st.text_input("Tel", value=tel_val, disabled=True, key="tel_hibrido", label_visibility="collapsed")
+
+        tr_placas, tr_mapa_placa = lista_placas_no_concat(df_tr_u)
+        cj_placas, cj_mapa_placa = lista_placas_no_concat(df_cj_u)
+        cli_nombres, cli_mapa = lista_simple_no_concat(df_cli, "id_cliente", "razon_social")
+        des_nombres, des_mapa = lista_simple_no_concat(df_des, "id_destino", "ciudad")
+
+        st.markdown("#### 🚛 Equipamiento Asignado")
+
+        col_sw1, col_sw2 = st.columns([3, 1])
+        with col_sw1:
+            st.markdown("##### Configuración de Arrastre")
+        with col_sw2:
+            modo_full = st.toggle("Configuración Full (Doble Caja)", value=False, key="toggle_full_hibrido")
+
+        ct1, ct2, ct3 = st.columns(3)
+        with ct1:
+            st.markdown("**Tracto**")
+            tr_placa_sel = st.selectbox("Placa Tracto", tr_placas if tr_placas else ["No hay"], key="tr_placa_hibrido", label_visibility="collapsed")
+            tr_data = tr_mapa_placa.get(tr_placa_sel, {})
+            id_tr = str(tr_data.get('id_tractor', '') or tr_placa_sel)
+            placa_str = str(tr_data.get('placas', '') or tr_placa_sel)
+            eco_tr = str(tr_data.get('numero_economico', '') or tr_data.get('economico', '') or tr_data.get('num_economico', '') or '')
+            
+            id_lin = str(tr_data.get('id_linea', '')).strip()
+            lin_nombre_str = id_lin
+            if not df_lin.empty:
+                match_lin = df_lin[df_lin['id_linea'].astype(str).str.upper() == id_lin.upper()]
+                if not match_lin.empty:
+                    col_nom_lin = next((c for c in match_lin.columns if "razon" in c.lower() or "nombre" in c.lower()), match_lin.columns[1] if len(match_lin.columns) > 1 else match_lin.columns[0])
+                    lin_nombre_str = str(match_lin.iloc[0].get(col_nom_lin, id_lin))
+
+            st.text_input("ID Tracto", value=id_tr, disabled=True, key="id_tr_hibrido")
+            st.text_input("Placas", value=placa_str, disabled=True, key="placa_tr_hibrido")
+            st.text_input("N° Económico", value=eco_tr, disabled=True, key="eco_tr_hibrido")
+            st.text_input("Línea de Transporte", value=lin_nombre_str, disabled=True, key="linea_tr_hibrido")
+
+        with ct2:
+            st.markdown("**Caja 1**")
+            cj1_placa_sel = st.selectbox("Placa Caja1", cj_placas if cj_placas else ["No hay"], key="cj1_placa_hibrido", label_visibility="collapsed")
+            cj1_data = cj_mapa_placa.get(cj1_placa_sel, {})
+            id_cj1 = str(cj1_data.get('id_caja', '') or cj1_placa_sel)
+            eco_cj1 = str(cj1_data.get('numero_economico', '') or cj1_data.get('economico', '') or cj1_data.get('num_economico', '') or '')
+            
+            st.text_input("ID Caja1", value=id_cj1, disabled=True, key="id_cj1_hibrido")
+            st.text_input("Placa Caja1", value=str(cj1_data.get('placas', '') or cj1_placa_sel), disabled=True, key="placa_cj1_hibrido")
+            st.text_input("N° Económico Caja 1", value=eco_cj1, disabled=True, key="id_eco_cj1_hibrido")
+            st.markdown("")
+
+        with ct3:
+            if modo_full:
+                st.markdown("**Caja 2 (Full Activo)**")
+                cj2_placa_sel = st.selectbox("Caja2", cj_placas if cj_placas else ["No hay"], key="cj2_placa_hibrido", label_visibility="collapsed")
+                cj2_data = cj_mapa_placa.get(cj2_placa_sel, {})
+                id_cj2 = str(cj2_data.get('id_caja', '') or cj2_placa_sel)
+                eco_cj2 = str(cj2_data.get('numero_economico', '') or cj2_data.get('economico', '') or cj2_data.get('num_economico', '') or '')
+                
+                st.text_input("ID Caja2", value=id_cj2, disabled=True, key="id_cj2_hibrido")
+                st.text_input("Placa Caja2", value=str(cj2_data.get('placas', '') or cj2_placa_sel), disabled=True, key="placa_cj2_hibrido")
+                st.text_input("N° Económico Caja 2", value=eco_cj2, disabled=True, key="id_eco_cj2_hibrido")
+            else:
+                id_cj2 = ""
+                st.markdown("**Caja 2 (Sencillo)**")
+                st.info("🔒 Modo Sencillo activo. Active el interruptor superior si requiere configuración Full.")
+
+        st.markdown("### 📄 Documentación y Destino")
+        r1, r2, r3, r4 = st.columns(4)
+        with r1: lote_val = st.text_input("Lote", placeholder="Ej: 17-1355", key="lote_hibrido")
+        with r2: rem_val = st.text_input("Folio Remisión", placeholder="Ej: REM-00123", key="rem_hibrido")
+        with r3: fac_val = st.text_input("Folio Factura", placeholder="Ej: FAC-00123", key="fac_hibrido")
+        with r4: fac2_val = st.text_input("Factura 2 (Full)", placeholder="Ej: FAC-00124", key="fac2_hibrido")
+
+        col_cli1, col_cli2 = st.columns(2)
+        with col_cli1:
+            cli_sel = st.selectbox("Cliente", cli_nombres if cli_nombres else ["No hay clientes"], key="cli_hibrido")
+            cli_data = cli_mapa.get(cli_sel, {})
+            id_cli = str(cli_data.get('id_cliente', '') or cli_sel)
+        with col_cli2:
+            des_sel = st.selectbox("Destino", des_nombres if des_nombres else ["No hay destinos"], key="des_hibrido")
+            des_data = des_mapa.get(des_sel, {})
+            id_des = str(des_data.get('id_destino', '') or des_sel)
+            
+        obs_val = st.text_area("Observaciones Generales", key="obs_hibrido")
+
+        # Generación del ID de Orden previo para mostrarlo claramente en pantalla
+        id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op if id_op else 'OP'}"
+
+        st.markdown("---")
+        st.info(f"🏷️ **Folio de Orden en Creación:** `{id_orden_temp}`")
+
+        # --------------------------------------------------------------------------
+        # Integración: Guía Fitosanitaria (Después de documentación y destino)
+        # --------------------------------------------------------------------------
+        st.markdown("#### 📜 Asignación de Guía Fitosanitaria y Conciliación Física")
+        lleva_guia = st.toggle("¿Esta orden de carga incluye Guía Fitosanitaria?", value=False, key="toggle_lleva_guia")
+        
+        id_guia_asignada_sel = ""
+        folios_asignados_detalle = {}
+        cajas_guia = 0
+        finca_guia_sel = ""
+        id_fin_guia_emision = ""
+        
+        if lleva_guia:
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
+                st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
+            with cg2:
+                fincas_empresa_lista = [f['nombre'] for f in fincas_data if str(f.get('id_empresa', '')).upper() == id_emp_principal.upper()] if 'fincas_data' in locals() else fin_prop_nombres
+                finca_guia_sel = st.selectbox("Finca Emisora de la Guía (Individual)", fincas_empresa_lista if fincas_empresa_lista else fin_prop_nombres, key="sel_finca_guia")
+                
+                finca_guia_data = next((f for f in fincas_data if f.get('nombre') == finca_guia_sel), {}) if 'fincas_data' in locals() else {}
+                id_fin_guia_emision = str(finca_guia_data.get('id_finca', '') or finca_guia_sel)
+
+            df_compras_guias, _ = get_df_safe("Compra_Guias")
+            df_stock_folios, _ = get_df_safe("Guias_Folios_Stock")
+            
+            if df_compras_guias.empty:
+                st.warning("⚠️ No hay compras de guías registradas en el sistema. Debe registrar una compra en el módulo '📜 Compra y Guías'.")
+            else:
+                lotes_empresa = df_compras_guias[df_compras_guias['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras_guias.columns else df_compras_guias
+                lotes_activos = lotes_empresa[lotes_empresa['estado'].astype(str).str.upper() == 'ACTIVO'] if not lotes_empresa.empty and 'estado' in lotes_empresa.columns else lotes_empresa
+                
+                if lotes_activos.empty:
+                    st.warning("⚠️ No hay lotes de guías con estatus ACTIVO para esta empresa.")
+                else:
+                    lote_opciones = lotes_activos.apply(lambda r: f"Lote: {r['id_compra']} | AAPS: {r.get('folio_compra_AAPS', 'N/D')}", axis=1).tolist()
+                    lote_sel_str = st.selectbox("Seleccione el Lote de Guías", lote_opciones, key="sel_lote_guia")
+                    
+                    id_compra_elegida = lote_sel_str.split("|")[0].replace("Lote:", "").strip()
+                    id_guia_asignada_sel = id_compra_elegida
+                    
+                    if not df_stock_folios.empty:
                         folios_lote_disp = df_stock_folios[
                             (df_stock_folios['id_compra'].astype(str) == id_compra_elegida) & 
                             (df_stock_folios['estado'].astype(str).str.upper() == 'DISPONIBLE')
@@ -332,7 +508,6 @@ if not df_stock_folios.empty:
                             for doc_t in tipos_docs_req:
                                 folios_doc_tipo = folios_lote_disp[folios_lote_disp['tipo_documento'].astype(str) == doc_t]
                                 if not folios_doc_tipo.empty:
-                                    # Formato detallado para ver claramente el documento y el folio exacto
                                     opciones_doc = folios_doc_tipo.apply(
                                         lambda r: f"Folio: {r['folio']} | Tipo: {r.get('tipo_documento', doc_t)} | Lote/Ref: {r.get('id_compra', '')}", 
                                         axis=1
@@ -350,7 +525,73 @@ if not df_stock_folios.empty:
                                         st.warning(f"Sin stock para {doc_t}")
                                         folios_asignados_detalle[doc_t] = ""
                                 idx_col += 1
-                                
+        else:
+            st.info("ℹ️ La orden se procesará sin Guía Fitosanitaria.")
+
+        st.markdown("---")
+        if st.button("🚀 GENERAR Y EXPEDIR ORDEN DE CARGA", type="primary", use_container_width=True):
+            if not fin_ruta_sel:
+                st.warning("⚠️ Debe seleccionar al menos una finca para la ruta de carga.")
+            elif "No hay" in tr_placa_sel or "No hay" in cj1_placa_sel:
+                st.warning("⚠️ Debe seleccionar un tracto y una caja válidos.")
+            else:
+                try:
+                    _, sh, _ = get_db()
+                    id_orden = id_orden_temp
+                    ws_ord = sh.worksheet("OrdenesCarga")
+                    
+                    ensure_columns_exist(ws_ord, [
+                        "id_orden", "folio_orden", "fecha_creacion", "id_usuario_crea", 
+                        "id_operador", "id_tractor", "id_caja1", "id_caja2", "id_linea", 
+                        "id_cliente", "id_destino", "id_lote", "folio_factura", 
+                        "estado", "observaciones", "ruta_fincas_ids",
+                        "lleva_guia", "id_guia_asignada", "finca_guia_id", "cajas_guia",
+                        "folio_certificado_origen", "folio_constancia_origen", 
+                        "folio_constancia_clorinacion", "folio_carta_responsiva"
+                    ])
+                    
+                    row = {
+                        "id_orden": id_orden, "folio_orden": id_orden, "fecha_creacion": datetime.now().isoformat(),
+                        "id_usuario_crea": st.session_state.username, "id_operador": id_op, "id_tractor": id_tr,
+                        "id_caja1": id_cj1, "id_caja2": id_cj2, "id_linea": id_lin, "id_cliente": id_cli,
+                        "id_destino": id_des, "id_lote": lote_val if lote_val else f"LOTE-{id_orden}",
+                        "folio_factura": fac_val, "estado": "ABIERTA", "observaciones": obs_val, "ruta_fincas_ids": ",".join(ids_fin_ruta),
+                        "lleva_guia": "SI" if lleva_guia else "NO",
+                        "id_guia_asignada": id_guia_asignada_sel if lleva_guia else "",
+                        "finca_guia_id": id_fin_guia_emision if lleva_guia else "",
+                        "cajas_guia": cajas_guia if lleva_guia else 0,
+                        "folio_certificado_origen": folios_asignados_detalle.get("Certificado de Origen", "") if lleva_guia else "",
+                        "folio_constancia_origen": folios_asignados_detalle.get("Constancia de Origen", "") if lleva_guia else "",
+                        "folio_constancia_clorinacion": folios_asignados_detalle.get("Constancia de Clorinacion", "") if lleva_guia else "",
+                        "folio_carta_responsiva": folios_asignados_detalle.get("Carta Responsiva", "") if lleva_guia else ""
+                    }
+                    
+                    if append_row_dict_safe(ws_ord, row):
+                        ws_ruta = sh.worksheet("Orden_Fincas")
+                        ensure_columns_exist(ws_ruta, ["id", "id_orden", "id_finca", "orden_visita", "estado_carga", "cajas_asignadas"])
+                        for idx, fid in enumerate(ids_fin_ruta):
+                            append_row_dict_safe(ws_ruta, {
+                                "id": f"{id_orden}-{fid}", "id_orden": id_orden, "id_finca": fid, 
+                                "orden_visita": idx + 1, "estado_carga": "PENDIENTE", "cajas_asignadas": ""
+                            })
+                        
+                        if lleva_guia and folios_asignados_detalle:
+                            try:
+                                ws_f_stock = sh.worksheet("Guias_Folios_Stock")
+                                data_f_stock = ws_f_stock.get_all_records()
+                                for i, f_row in enumerate(data_f_stock, start=2):
+                                    f_val = str(f_row.get("folio", ""))
+                                    f_compra = str(f_row.get("id_compra", ""))
+                                    if f_compra == id_guia_asignada_sel and f_val in folios_asignados_detalle.values():
+                                        ws_f_stock.update_cell(i, ws_f_stock.find("estado").col, "ASIGNADO")
+                                        ws_f_stock.update_cell(i, ws_f_stock.find("id_orden_asignada").col, id_orden)
+                            except Exception as ex_stock:
+                                st.warning(f"Orden creada, pero hubo un detalle al actualizar el stock de folios: {ex_stock}")
+
+                        st.balloons()
+                        st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
+                except Exception as e:
+                    st.error(f"Error al procesar la orden: {e}")                                
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
