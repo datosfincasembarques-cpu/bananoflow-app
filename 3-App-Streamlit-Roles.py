@@ -308,7 +308,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     st.markdown("---")
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
-    # --------------------------------------------------------------------------
+   # --------------------------------------------------------------------------
     # 6.1 Submódulo: 📦 Crear Orden
     # --------------------------------------------------------------------------
     elif menu_sel == "📦 Crear Orden":
@@ -577,7 +577,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
-
+                    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
