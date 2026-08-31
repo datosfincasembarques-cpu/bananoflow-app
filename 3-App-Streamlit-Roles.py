@@ -460,10 +460,13 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
                 st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
             with cg2:
-                fincas_empresa_lista = [f['nombre'] for f in fincas_data if str(f.get('id_empresa', '')).upper() == id_emp_principal.upper()] if 'fincas_data' in locals() else fin_prop_nombres
-                finca_guia_sel = st.selectbox("Finca Emisora de la Guía (Individual)", fincas_empresa_lista if fincas_empresa_lista else fin_prop_nombres, key="sel_finca_guia")
+                # Filtrado estricto de fincas pertenecientes únicamente a la empresa principal activa
+                df_fincas_empresa = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
+                fincas_empresa_nombres, fincas_empresa_mapa = lista_simple_no_concat(df_fincas_empresa, "id_finca", "nombre")
                 
-                finca_guia_data = next((f for f in fincas_data if f.get('nombre') == finca_guia_sel), {}) if 'fincas_data' in locals() else {}
+                finca_guia_sel = st.selectbox("Finca Emisora de la Guía (Individual)", fincas_empresa_nombres if fincas_empresa_nombres else ["No hay fincas para esta empresa"], key="sel_finca_guia")
+                
+                finca_guia_data = fincas_empresa_mapa.get(finca_guia_sel, {})
                 id_fin_guia_emision = str(finca_guia_data.get('id_finca', '') or finca_guia_sel)
 
             df_compras_guias, _ = get_df_safe("Compra_Guias")
@@ -591,7 +594,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
-                    st.error(f"Error al procesar la orden: {e}")                                
+                    st.error(f"Error al procesar la orden: {e}")
+                    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
