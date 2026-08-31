@@ -460,7 +460,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
                 st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
             with cg2:
-                # Filtrado estricto de fincas pertenecientes únicamente a la empresa principal activa
+                # Fila superior de la sección general con todas las fincas (sin alterar)
+                # Pero aquí para la Guía Fitosanitaria aplicamos el filtro estricto por empresa:
                 df_fincas_empresa = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
                 fincas_empresa_nombres, fincas_empresa_mapa = lista_simple_no_concat(df_fincas_empresa, "id_finca", "nombre")
                 
@@ -594,8 +595,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
-                    st.error(f"Error al procesar la orden: {e}")
-                    
+                    st.error(f"Error al procesar la orden: {e}")                    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
