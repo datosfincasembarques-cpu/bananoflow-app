@@ -318,17 +318,26 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         fin_todos_nombres, fin_todos_mapa = lista_simple_no_concat(df_fin, "id_finca", "nombre")
         ops_nombres, ops_mapa = lista_simple_no_concat(df_op, "id_operador", "nombre")
 
-        # Generación del ID / Folio de orden de forma dinámica y visual
+        # Generación del consecutivo actual basado en la cantidad de registros en la BD
         try:
             _, sh_id, _ = get_db()
             ws_ord_id = sh_id.worksheet("OrdenesCarga")
             all_ords = ws_ord_id.get_all_records()
             next_num = len(all_ords) + 1
-            id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d')}-{next_num:03d}"
+            id_orden_temp = f"OC-{next_num}"
         except Exception:
-            id_orden_temp = f"OC-{datetime.now().strftime('%Y%m%d%H%M')}-{id_op if id_op else 'OP'}"
+            id_orden_temp = f"OC-1"
 
-        st.info(f"🏷️ **Folio de la Orden Asignado (Próximo a emitir):** `{id_orden_temp}`")
+        # Visualización limpia dividida en dos etiquetas independientes con tamaño destacado
+        st.markdown(
+            f"""
+            <div style="padding: 10px 0px;">
+                <span style="font-size: 14px; font-weight: normal; color: #555;">Folio:</span><br>
+                <span style="font-size: 22px; font-weight: bold; color: #1f77b4;">{id_orden_temp}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         # Únicamente dejamos la Ruta de Carga arriba, eliminando el bloque redundante de "Finca Titular Guía (PROPIA)"
         st.markdown("**Ruta de Carga (Fincas participantes)**")
@@ -592,7 +601,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
-
     
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
