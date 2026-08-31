@@ -308,10 +308,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     st.markdown("---")
     menu_sel = st.session_state.get('menu_oficina', '📦 Crear Orden')
 
-   # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
     # 6.1 Submódulo: 📦 Crear Orden
     # --------------------------------------------------------------------------
-    elif menu_sel == "📦 Crear Orden":
+    if menu_sel == "📦 Crear Orden":
         st.subheader("📝 Generación de Nueva Orden de Carga")
         
         df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
@@ -474,7 +474,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             
             st.text_input("ID Caja1", value=id_cj1, disabled=True, key="id_cj1_hibrido")
             st.text_input("Placa Caja1", value=str(cj1_data.get('placas', '') or cj1_placa_sel), disabled=True, key="placa_cj1_hibrido")
-            st.text_input("N° Económico Caja 1", value=eco_cj1, disabled=True, key="eco_cj1_hibrido")
+            st.text_input("N° Económico Caja 1", value=eco_cj1, disabled=True, key="id_eco_cj1_hibrido")
             st.markdown("")
 
         with ct3:
@@ -487,7 +487,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 
                 st.text_input("ID Caja2", value=id_cj2, disabled=True, key="id_cj2_hibrido")
                 st.text_input("Placa Caja2", value=str(cj2_data.get('placas', '') or cj2_placa_sel), disabled=True, key="placa_cj2_hibrido")
-                st.text_input("N° Económico Caja 2", value=eco_cj2, disabled=True, key="eco_cj2_hibrido")
+                st.text_input("N° Económico Caja 2", value=eco_cj2, disabled=True, key="id_eco_cj2_hibrido")
             else:
                 id_cj2 = ""
                 st.markdown("**Caja 2 (Sencillo)**")
@@ -559,7 +559,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 "orden_visita": idx + 1, "estado_carga": "PENDIENTE", "cajas_asignadas": ""
                             })
                         
-                        # Actualizar estatus de los folios consumidos en Guias_Folios_Stock si lleva guía
                         if lleva_guia and folios_asignados_detalle:
                             try:
                                 ws_f_stock = sh.worksheet("Guias_Folios_Stock")
