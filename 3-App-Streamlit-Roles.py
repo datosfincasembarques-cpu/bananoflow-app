@@ -311,7 +311,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     # --------------------------------------------------------------------------
     # 6.1 Submódulo: 📦 Crear Orden
     # --------------------------------------------------------------------------
-    if menu_sel == "📦 Crear Orden":
+    elif menu_sel == "📦 Crear Orden":
         st.subheader("📝 Generación de Nueva Orden de Carga")
         
         df_fincas_emp = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
@@ -334,6 +334,82 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             for fn in fin_ruta_sel:
                 d = fin_todos_mapa.get(fn, {})
                 ids_fin_ruta.append(str(d.get('id_finca', '') or fn))
+
+        # --------------------------------------------------------------------------
+        # Integración: Guía Fitosanitaria (Finca específica, cajas y 4 documentos)
+        # --------------------------------------------------------------------------
+        st.markdown("#### 📜 Asignación de Guía Fitosanitaria")
+        lleva_guia = st.toggle("¿Esta orden de carga incluye Guía Fitosanitaria?", value=False, key="toggle_lleva_guia")
+        
+        id_guia_asignada_sel = ""
+        folios_asignados_detalle = {}
+        cajas_guia = 0
+        finca_guia_sel = ""
+        id_fin_guia_emision = ""
+        
+        if lleva_guia:
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
+                st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
+            with cg2:
+                fincas_empresa_lista = [f['nombre'] for f in fincas_data if str(f.get('id_empresa', '')).upper() == id_emp_principal.upper()] if 'fincas_data' in locals() else fin_prop_nombres
+                finca_guia_sel = st.selectbox("Finca Emisora de la Guía (Individual)", fincas_empresa_lista if fincas_empresa_lista else fin_prop_nombres, key="sel_finca_guia")
+                
+                finca_guia_data = next((f for f in fincas_data if f.get('nombre') == finca_guia_sel), {}) if 'fincas_data' in locals() else {}
+                id_fin_guia_emision = str(finca_guia_data.get('id_finca', '') or finca_guia_sel)
+
+            df_compras_guias, _ = get_df_safe("Compra_Guias")
+            df_stock_folios, _ = get_df_safe("Guias_Folios_Stock")
+            
+            if df_compras_guias.empty:
+                st.warning("⚠️ No hay compras de guías registradas en el sistema. Debe registrar una compra en el módulo '📜 Compra y Guías'.")
+            else:
+                lotes_empresa = df_compras_guias[df_compras_guias['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras_guias.columns else df_compras_guias
+                lotes_activos = lotes_empresa[lotes_empresa['estado'].astype(str).str.upper() == 'ACTIVO'] if not lotes_empresa.empty and 'estado' in lotes_empresa.columns else lotes_empresa
+                
+                if lotes_activos.empty:
+                    st.warning("⚠️ No hay lotes de guías con estatus ACTIVO para esta empresa.")
+                else:
+                    lote_opciones = lotes_activos.apply(lambda r: f"Lote: {r['id_compra']} | AAPS: {r.get('folio_compra_AAPS', 'N/D')}", axis=1).tolist()
+                    lote_sel_str = st.selectbox("Seleccione el Lote de Guías", lote_opciones, key="sel_lote_guia")
+                    
+                    id_compra_elegida = lote_sel_str.split("|")[0].replace("Lote:", "").strip()
+                    id_guia_asignada_sel = id_compra_elegida
+                    
+                    if not df_stock_folios.empty:
+                        folios_lote_disp = df_stock_folios[
+                            (df_stock_folios['id_compra'].astype(str) == id_compra_elegida) & 
+                            (df_stock_folios['estado'].astype(str).str.upper() == 'DISPONIBLE')
+                        ]
+                        
+                        if folios_lote_disp.empty:
+                            st.error("❌ Este lote ya no cuenta con folios disponibles en stock.")
+                        else:
+                            st.markdown("##### 📄 Folios asignados de los 4 documentos para esta guía:")
+                            tipos_docs_req = [
+                                "Certificado de Origen",
+                                "Constancia de Origen",
+                                "Constancia de Clorinacion",
+                                "Carta Responsiva"
+                            ]
+                            
+                            col_f1, col_f2 = st.columns(2)
+                            idx_col = 0
+                            for doc_t in tipos_docs_req:
+                                folios_doc_tipo = folios_lote_disp[folios_lote_disp['tipo_documento'].astype(str) == doc_t]
+                                if not folios_doc_tipo.empty:
+                                    lista_f_disponibles = folios_doc_tipo['folio'].tolist()
+                                    with (col_f1 if idx_col % 2 == 0 else col_f2):
+                                        folio_elegido = st.selectbox(f"{doc_t}", lista_f_disponibles, key=f"sel_folio_{doc_t}")
+                                        folios_asignados_detalle[doc_t] = folio_elegido
+                                else:
+                                    with (col_f1 if idx_col % 2 == 0 else col_f2):
+                                        st.warning(f"Sin stock para {doc_t}")
+                                        folios_asignados_detalle[doc_t] = ""
+                                idx_col += 1
+        else:
+            st.info("ℹ️ La orden se procesará sin Guía Fitosanitaria.")
 
         st.markdown("#### 👤 Operador Asignado")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
@@ -452,7 +528,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         "id_orden", "folio_orden", "fecha_creacion", "id_usuario_crea", 
                         "id_operador", "id_tractor", "id_caja1", "id_caja2", "id_linea", 
                         "id_cliente", "id_destino", "id_lote", "folio_factura", 
-                        "estado", "observaciones", "ruta_fincas_ids"
+                        "estado", "observaciones", "ruta_fincas_ids",
+                        "lleva_guia", "id_guia_asignada", "finca_guia_id", "cajas_guia",
+                        "folio_certificado_origen", "folio_constancia_origen", 
+                        "folio_constancia_clorinacion", "folio_carta_responsiva"
                     ])
                     
                     row = {
@@ -460,7 +539,15 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         "id_usuario_crea": st.session_state.username, "id_operador": id_op, "id_tractor": id_tr,
                         "id_caja1": id_cj1, "id_caja2": id_cj2, "id_linea": id_lin, "id_cliente": id_cli,
                         "id_destino": id_des, "id_lote": lote_val if lote_val else f"LOTE-{id_orden}",
-                        "folio_factura": fac_val, "estado": "ABIERTA", "observaciones": obs_val, "ruta_fincas_ids": ",".join(ids_fin_ruta)
+                        "folio_factura": fac_val, "estado": "ABIERTA", "observaciones": obs_val, "ruta_fincas_ids": ",".join(ids_fin_ruta),
+                        "lleva_guia": "SI" if lleva_guia else "NO",
+                        "id_guia_asignada": id_guia_asignada_sel if lleva_guia else "",
+                        "finca_guia_id": id_fin_guia_emision if lleva_guia else "",
+                        "cajas_guia": cajas_guia if lleva_guia else 0,
+                        "folio_certificado_origen": folios_asignados_detalle.get("Certificado de Origen", "") if lleva_guia else "",
+                        "folio_constancia_origen": folios_asignados_detalle.get("Constancia de Origen", "") if lleva_guia else "",
+                        "folio_constancia_clorinacion": folios_asignados_detalle.get("Constancia de Clorinacion", "") if lleva_guia else "",
+                        "folio_carta_responsiva": folios_asignados_detalle.get("Carta Responsiva", "") if lleva_guia else ""
                     }
                     
                     if append_row_dict_safe(ws_ord, row):
@@ -471,12 +558,27 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 "id": f"{id_orden}-{fid}", "id_orden": id_orden, "id_finca": fid, 
                                 "orden_visita": idx + 1, "estado_carga": "PENDIENTE", "cajas_asignadas": ""
                             })
+                        
+                        # Actualizar estatus de los folios consumidos en Guias_Folios_Stock si lleva guía
+                        if lleva_guia and folios_asignados_detalle:
+                            try:
+                                ws_f_stock = sh.worksheet("Guias_Folios_Stock")
+                                data_f_stock = ws_f_stock.get_all_records()
+                                for i, f_row in enumerate(data_f_stock, start=2):
+                                    f_val = str(f_row.get("folio", ""))
+                                    f_compra = str(f_row.get("id_compra", ""))
+                                    if f_compra == id_guia_asignada_sel and f_val in folios_asignados_detalle.values():
+                                        ws_f_stock.update_cell(i, ws_f_stock.find("estado").col, "ASIGNADO")
+                                        ws_f_stock.update_cell(i, ws_f_stock.find("id_orden_asignada").col, id_orden)
+                            except Exception as ex_stock:
+                                st.warning(f"Orden creada, pero hubo un detalle al actualizar el stock de folios: {ex_stock}")
+
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
 
-   # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
     elif menu_sel == "✏️ Remisión/Factura":
