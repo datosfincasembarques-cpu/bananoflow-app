@@ -351,7 +351,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             unsafe_allow_html=True
         )
 
-        # Únicamente dejamos la Ruta de Carga arriba, eliminando el bloque redundante de "Finca Titular Guía (PROPIA)"
+        # Únicamente dejamos la Ruta de Carga arriba
         st.markdown("**Ruta de Carga (Fincas participantes)**")
         fin_ruta_sel = st.multiselect("Fincas donde cargará", fin_todos_nombres, key="fin_ruta_hibrido")
         ids_fin_ruta = []
@@ -461,7 +461,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         obs_val = st.text_area("Observaciones Generales", key="obs_hibrido")
 
         # --------------------------------------------------------------------------
-        # Integración: Guía Fitosanitaria (Después de documentación y destino)
+        # Integración: Guía Fitosanitaria (Filtrada por la empresa actual)
         # --------------------------------------------------------------------------
         st.markdown("#### 📜 Asignación de Guía Fitosanitaria y Conciliación Física")
         lleva_guia = st.toggle("¿Esta orden de carga incluye Guía Fitosanitaria?", value=False, key="toggle_lleva_guia")
@@ -478,7 +478,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
                 st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
             with cg2:
-                # Filtrado exclusivo por empresa activa principal para la finca emisora de la guía (Asegurando que cambie acorde a la empresa seleccionada)
+                # Filtrado exclusivo por empresa activa principal para la finca emisora de la guía
                 df_fincas_empresa = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
                 fincas_empresa_nombres, fincas_empresa_mapa = lista_simple_no_concat(df_fincas_empresa, "id_finca", "nombre")
                 
@@ -514,8 +514,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         if folios_lote_disp.empty:
                             st.error("❌ Este lote ya no cuenta con folios disponibles en stock.")
                         else:
-                            st.markdown("##### 🔍 Conciliación Detallada de Folios Físicos")
-                            st.caption("Seleccione el folio específico verificando el número y tipo de documento impreso:")
+                            st.markdown("##### 🔍 Conciliación Detallada de Folios Físicos Disponibles")
+                            st.caption("Visualice y seleccione el folio específico disponible para cada documento requerido:")
                             
                             tipos_docs_req = [
                                 "Certificado de Origen",
@@ -529,21 +529,24 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             for doc_t in tipos_docs_req:
                                 folios_doc_tipo = folios_lote_disp[folios_lote_disp['tipo_documento'].astype(str) == doc_t]
                                 if not folios_doc_tipo.empty:
+                                    # Formato limpio mostrando el número de folio disponible de forma clara
                                     opciones_doc = folios_doc_tipo.apply(
-                                        lambda r: f"Folio: {r['folio']} | Tipo: {r.get('tipo_documento', doc_t)} | Lote/Ref: {r.get('id_compra', '')}", 
+                                        lambda r: f"{r['folio']} | Disponible", 
                                         axis=1
                                     ).tolist()
                                     
-                                    mapa_opciones = {f"Folio: {r['folio']} | Tipo: {r.get('tipo_documento', doc_t)} | Lote/Ref: {r.get('id_compra', '')}": r['folio'] for _, r in folios_doc_tipo.iterrows()}
+                                    mapa_opciones = {f"{r['folio']} | Disponible": r['folio'] for _, r in folios_doc_tipo.iterrows()}
                                     
                                     with (col_f1 if idx_col % 2 == 0 else col_f2):
-                                        sel_etiqueta = st.selectbox(f"📄 {doc_t}", opciones_doc, key=f"sel_folio_det_{doc_t}")
+                                        st.markdown(f"**{doc_t}**")
+                                        sel_etiqueta = st.selectbox(f"Folio {doc_t}", opciones_doc, key=f"sel_folio_det_{doc_t}", label_visibility="collapsed")
                                         folio_elegido = mapa_opciones.get(sel_etiqueta, "")
                                         folios_asignados_detalle[doc_t] = folio_elegido
                                         st.success(f"Asignando **{doc_t}**: `{folio_elegido}`")
                                 else:
                                     with (col_f1 if idx_col % 2 == 0 else col_f2):
-                                        st.warning(f"Sin stock para {doc_t}")
+                                        st.markdown(f"**{doc_t}**")
+                                        st.warning(f"Sin stock disponible para {doc_t}")
                                         folios_asignados_detalle[doc_t] = ""
                                 idx_col += 1
         else:
@@ -612,7 +615,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.balloons()
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
-                    st.error(f"Error al procesar la orden: {e}")    
+                    st.error(f"Error al procesar la orden: {e}")
+
+    
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
     # --------------------------------------------------------------------------
