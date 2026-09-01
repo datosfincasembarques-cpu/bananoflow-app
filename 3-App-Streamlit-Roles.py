@@ -1550,7 +1550,6 @@ if rol_actual in ["VIGILANCIA"]:
                     cell = ws_of.find(str(id_orden_vig))
                     if cell:
                         row_idx = cell.row
-                        # Actualizar estado a LLEGADO_CASETA y guardar placas/chofer
                         ws_of.update_cell(row_idx, ws_of.find("estado_carga").col, "LLEGADO_CASETA")
                         st.success(f"✅ Unidad {placa_vehiculo} registrada en caseta para la orden {id_orden_vig}.")
                         time.sleep(1)
@@ -1621,43 +1620,47 @@ elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
 
 elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {finca_actual}</h2>", unsafe_allow_html=True)
-    st.markdown("Control de Producción Diaria y Entrada a Inventario de Producto Terminado")
+    st.markdown("Control de Producción Diaria (Inventario) y Salidas de Fruta de Tercera")
 
     df_of, _ = get_df_safe("Orden_Fincas")
 
     if df_of.empty:
-        st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
         df_finca = pd.DataFrame()
     else:
         df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
 
     df_planta_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', 'LLEGADO_CASETA', 'EN_PROCESO', 'EN FINCA'])] if not df_finca.empty else df_finca
-    st.metric("Órdenes Abiertas / Disponibles para Surtir", len(df_planta_pendientes))
+    st.metric("Órdenes Abiertas / Disponibles para Surtir en el Día", len(df_planta_pendientes))
     st.dataframe(df_planta_pendientes, use_container_width=True)
 
     st.markdown("---")
 
-    tab_prod, tab_cons = st.tabs(["📦 REGISTRAR PRODUCCIÓN DIARIA (INVENTARIO)", "📊 HISTORIAL DE PRODUCCIÓN EN PLANTA"])
+    tab_prod, tab_tercera, tab_cons = st.tabs([
+        "📦 REGISTRAR PRODUCCIÓN (PRIMERA, SEGUNDA, DEDO SUELTO)", 
+        "🚚 DESPACHO FRUTA DE TERCERA (SIN ORDEN)", 
+        "📊 HISTORIAL GENERAL EN PLANTA"
+    ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with tab_prod:
-        st.markdown("<h3 style='color: #007bff;'>ENTRADA DE PRODUCTO TERMINADO AL INVENTARIO</h3>", unsafe_allow_html=True)
-        st.caption("💡 Puede registrar producción parcial o adelantada en caso de despachos urgentes sin saldo previo (los racimos cortados pueden dejarse en 0 si aún no se contabilizan).")
+        st.markdown("<h3 style='color: #007bff;'>ENTRADA A INVENTARIO - PRODUCCIÓN DIARIA DE EMPAQUE</h3>", unsafe_allow_html=True)
+        st.caption("💡 Registre la producción separada por calidad (Primera, Segunda y Dedo Suelto) y los racimos cortados como parámetro de rendimiento.")
 
-        col_pl1, col_pl2 = st.columns(2)
-        with col_pl1:
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
             fecha_produccion = st.date_input("Fecha de Producción / Empaque", value=datetime.now().date(), key="planta_fecha_prod")
-            total_cajas_empaque = st.number_input("Total de Cajas Empacadas", min_value=0, value=0, step=10, key="planta_cajas")
-        with col_pl2:
-            racimos_procesados = st.number_input("Racimos Procesados (Cortados - Opcional)", min_value=0, value=0, step=5, key="planta_racimos")
-            peso_neto_caja = st.number_input("Peso Neto por Caja (Kg)", value=19.5, step=0.1, key="planta_peso")
+            cajas_primera = st.number_input("Cajas de Primera", min_value=0, value=1000, step=10, key="planta_cajas_primera")
+            cajas_segunda = st.number_input("Cajas de Segunda", min_value=0, value=50, step=5, key="planta_cajas_segunda")
+        with col_p2:
+            cajas_dedo_suelto = st.number_input("Dedo Suelto (Cantidad / Cajas)", min_value=0.0, value=0.0, step=1.0, key="planta_dedo_suelto")
+            racimos_procesados = st.number_input("Racimos Procesados (Cortados)", min_value=0, value=950, step=5, key="planta_racimos")
 
-        observaciones_planta = st.text_area("Observaciones de la Jornada / Despacho Urgente", placeholder="Detalles de empaque, despacho sin saldo previo...", key="planta_obs")
+        observaciones_planta = st.text_area("Observaciones de la Jornada en Planta", placeholder="Detalles de la cosecha, clima, rendimiento...", key="planta_obs")
 
         st.markdown("<br>", unsafe_allow_html=True)
         foto_produccion = st.camera_input("📷 FOTO - PALETIZADO / REGISTRO DIARIO PLANTA", key="planta_foto_evidencia")
 
-        if st.button("✅ GUARDAR PRODUCCIÓN DIARIA EN INVENTARIO", type="primary", use_container_width=True, key="btn_guardar_produccion"):
+        if st.button("✅ GUARDAR ENTRADA A INVENTARIO (PRODUCCIÓN)", type="primary", use_container_width=True, key="btn_guardar_produccion"):
             try:
                 _, sh, _ = get_db()
                 nombres_hojas = [w.title for w in sh.worksheets()]
@@ -1668,8 +1671,8 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
 
                 if not ws_p.get_all_values():
                     ws_p.append_row([
-                        "id_produccion", "fecha_produccion", "id_finca", "total_cajas", 
-                        "racimos_procesados", "peso_neto_caja", "observaciones", 
+                        "id_produccion", "fecha_produccion", "id_finca", "cajas_primera", 
+                        "cajas_segunda", "dedo_suelto", "racimos_procesados", "observaciones", 
                         "fecha_registro", "id_usuario", "estado_proceso"
                     ])
 
@@ -1678,9 +1681,10 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                     "id_produccion": id_reg_p,
                     "fecha_produccion": str(fecha_produccion),
                     "id_finca": str(finca_actual),
-                    "total_cajas": str(total_cajas_empaque),
+                    "cajas_primera": str(cajas_primera),
+                    "cajas_segunda": str(cajas_segunda),
+                    "dedo_suelto": str(cajas_dedo_suelto),
                     "racimos_procesados": str(racimos_procesados),
-                    "peso_neto_caja": str(peso_neto_caja),
                     "observaciones": str(observaciones_planta),
                     "fecha_registro": str(hora_dispositivo),
                     "id_usuario": str(st.session_state.get("username", "jefe_planta")),
@@ -1691,17 +1695,85 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 append_row_dict_safe(ws_p, dict_reg_p)
 
                 st.cache_data.clear()
-                st.success(f"✅ ¡Producción del día {fecha_produccion} registrada con éxito en el inventario de planta!")
+                st.success(f"✅ ¡Producción del día {fecha_produccion} registrada con éxito en el inventario!")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al guardar la producción: {e}")
 
+    with tab_tercera:
+        st.markdown("<h3 style='color: #007bff;'>REGISTRO DE DESPACHO - FRUTA DE TERCERA (SIN ORDEN DE CARGA)</h3>", unsafe_allow_html=True)
+        st.caption("💡 Este módulo registra salidas de fruta de tercera de manera independiente, sin requerir orden de carga, detallando chofer, cliente y rejas de plástico.")
+
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            fecha_despacho_tercera = st.date_input("Fecha de Despacho", value=datetime.now().date(), key="tercera_fecha")
+            num_despacho = st.text_input("Número de Despacho / Folio", placeholder="Ej. DESP-001", key="tercera_num_despacho")
+            cliente_tercera = st.text_input("Cliente", placeholder="Nombre del cliente", key="tercera_cliente")
+        with col_t2:
+            datos_chofer = st.text_input("Datos del Chofer (Nombre / Placas)", placeholder="Nombre y vehículo", key="tercera_chofer")
+            num_rejas_plastico = st.number_input("Número de Rejas de Plástico", min_value=0, value=0, step=1, key="tercera_rejas")
+            cantidad_tercera = st.number_input("Cantidad / Unidades de Tercera", min_value=0.0, value=0.0, step=1.0, key="tercera_cantidad")
+
+        obs_tercera = st.text_area("Observaciones de Despacho de Tercera", placeholder="Notas adicionales...", key="tercera_obs")
+
+        if st.button("✅ GUARDAR DESPACHO DE TERCERA", type="primary", use_container_width=True, key="btn_guardar_tercera"):
+            try:
+                _, sh, _ = get_db()
+                nombres_hojas = [w.title for w in sh.worksheets()]
+                if "Despachos_Tercera" in nombres_hojas:
+                    ws_t = sh.worksheet("Despachos_Tercera")
+                else:
+                    ws_t = sh.add_worksheet(title="Despachos_Tercera", rows=1000, cols=20)
+
+                if not ws_t.get_all_values():
+                    ws_t.append_row([
+                        "id_despacho_tercera", "fecha_despacho", "id_finca", "num_despacho", 
+                        "cliente", "datos_chofer", "num_rejas_plastico", "cantidad_tercera", 
+                        "observaciones", "fecha_registro", "id_usuario"
+                    ])
+
+                id_reg_t = f"TERC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                dict_reg_t = {
+                    "id_despacho_tercera": id_reg_t,
+                    "fecha_despacho": str(fecha_despacho_tercera),
+                    "id_finca": str(finca_actual),
+                    "num_despacho": str(num_despacho),
+                    "cliente": str(cliente_tercera),
+                    "datos_chofer": str(datos_chofer),
+                    "num_rejas_plastico": str(num_rejas_plastico),
+                    "cantidad_tercera": str(cantidad_tercera),
+                    "observaciones": str(obs_tercera),
+                    "fecha_registro": str(hora_dispositivo),
+                    "id_usuario": str(st.session_state.get("username", "jefe_planta"))
+                }
+
+                ensure_columns_exist(ws_t, list(dict_reg_t.keys()))
+                append_row_dict_safe(ws_t, dict_reg_t)
+
+                st.cache_data.clear()
+                st.success(f"✅ ¡Despacho de fruta de tercera registrado correctamente!")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar despacho de tercera: {e}")
+
     with tab_cons:
-        st.markdown("<h3 style='color: #007bff;'>HISTORIAL DE PRODUCCIÓN REGISTRADA</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #007bff;'>HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
+        
+        st.markdown("#### 📦 Producción (Inventario de Primera, Segunda y Dedo Suelto)")
         df_prod_hist, _ = get_df_safe("Produccion_Planta")
         if not df_prod_hist.empty:
             df_prod_finca = df_prod_hist if finca_actual.upper() == "TODAS" else df_prod_hist[df_prod_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
             st.dataframe(df_prod_finca, use_container_width=True)
         else:
-            st.info("No hay registros de producción previos guardados en el sistema.")
+            st.info("No hay registros de producción previos.")
+
+        st.markdown("---")
+        st.markdown("#### 🚚 Despachos de Fruta de Tercera (Sin Orden)")
+        df_terc_hist, _ = get_df_safe("Despachos_Tercera")
+        if not df_terc_hist.empty:
+            df_terc_finca = df_terc_hist if finca_actual.upper() == "TODAS" else df_terc_hist[df_terc_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
+            st.dataframe(df_terc_finca, use_container_width=True)
+        else:
+            st.info("No hay registros de despachos de tercera previos.")
