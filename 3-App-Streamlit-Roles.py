@@ -1520,438 +1520,110 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             with ms4:
                 st.metric(label="📌 Estatus", value=filtro_seg_estado)
                             
-# ==============================================================================
-# 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES: VIGILANCIA, ESTIBA, PLANTA)
-# ==============================================================================
-if st.session_state.rol == "VIGILANCIA":
-    st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
-    st.markdown("Vehículos en Finca / Tránsito")
-    
-    df_of, _ = get_df_safe("Orden_Fincas")
-    finca_actual = str(st.session_state.finca_asignada)
-    
-    if df_of.empty: 
-        st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
-        df_finca = pd.DataFrame()
-    else:
-        df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
-        
-    df_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', ''])] if not df_finca.empty else df_finca
-    st.metric("Pendientes de Entrada", len(df_pendientes))
-    st.dataframe(df_pendientes, use_container_width=True)
-    
-    st.markdown("---")
-    
-    tab_ent, tab_sal = st.tabs(["📥 REGISTRAR ENTRADA", "📤 REGISTRAR SALIDA"])
-    hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# ==========================================
+# CÓDIGO 7: MÓDULOS OPERATIVOS ADICIONALES (VIGILANCIA, ESTIBA Y PLANTA)
+# ==========================================
 
-    with tab_ent:
-        st.markdown("<h3 style='color: #28a745;'>ENTRADA FINCA</h3>", unsafe_allow_html=True)
-        
-        lista_ocs = df_pendientes['id_orden'].astype(str).tolist() if not df_pendientes.empty else ["Sin OC pendientes"]
-        oc_sel = st.selectbox("Seleccione la OC del Transporte:", lista_ocs, key="vis_oc_sel_rol")
-        
-        df_op_m, _ = get_df_safe("Operadores")
-        df_lin_m, _ = get_df_safe("LineasTransporte")
-        df_tr_m, _ = get_df_safe("Tractos")
-        df_tr2_m, _ = get_df_safe("Tractocamiones")
-        df_cj_m, _ = get_df_safe("Cajas")
-        df_cj2_m, _ = get_df_safe("Cajas_Thermoking")
-        
-        df_tr_unif = pd.concat([df_tr_m, df_tr2_m], ignore_index=True) if not df_tr_m.empty and not df_tr2_m.empty else (df_tr_m if not df_tr_m.empty else df_tr2_m)
-        df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
+rol_actual = str(st.session_state.get("rol", "")).upper()
+finca_actual = str(st.session_state.get("finca_asignada", "TODAS"))
 
-        info_orden = {}
-        if oc_sel != "Sin OC pendientes":
-            try:
-                _, sh_db, _ = get_db()
-                for nombre_hoja in ["OrdenesCarga", "Embarques", "Control_Embarques", "Ordenes"]:
-                    try:
-                        ws_gen = sh_db.worksheet(nombre_hoja)
-                        df_gen = pd.DataFrame(ws_gen.get_all_records())
-                        if not df_gen.empty:
-                            cols_posibles = [c for c in df_gen.columns if 'orden' in c.lower() or 'oc' in c.lower()]
-                            for col in cols_posibles:
-                                match_gen = df_gen[df_gen[col].astype(str) == str(oc_sel)]
-                                if not match_gen.empty:
-                                    info_orden = match_gen.iloc[0].to_dict()
-                                    break
-                        if info_orden: break
-                    except:
-                        continue
-            except:
-                pass
+if rol_actual in ["VIGILANCIA"]:
+    st.markdown(f"<h2 style='color: #007bff;'>🛡️ Módulo de Vigilancia - Control de Accesos ({finca_actual})</h2>", unsafe_allow_html=True)
+    st.markdown("Registro de entrada y salida de unidades y transporte en caseta")
+
+    df_of_vig, _ = get_df_safe("Orden_Fincas")
+    
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        st.markdown("### 📥 Registrar Entrada de Unidad")
+        id_orden_vig = st.text_input("ID de Orden o Folio de Carga", key="vig_id_orden")
+        placa_vehiculo = st.text_input("Placas del Transporte / Contenedor", key="vig_placas")
+        chofer_nombre = st.text_input("Nombre del Conductor", key="vig_chofer")
+        
+        if st.button("registrar llegada a caseta", type="primary", key="btn_vig_entrada"):
+            if not id_orden_vig or not placa_vehiculo:
+                st.warning("Debe ingresar el ID de la orden y las placas del vehículo.")
+            else:
+                try:
+                    _, sh_v, _ = get_db()
+                    ws_of = sh_v.worksheet("Orden_Fincas")
+                    cell = ws_of.find(str(id_orden_vig))
+                    if cell:
+                        row_idx = cell.row
+                        # Actualizar estado a LLEGADO_CASETA y guardar placas/chofer
+                        ws_of.update_cell(row_idx, ws_of.find("estado_carga").col, "LLEGADO_CASETA")
+                        st.success(f"✅ Unidad {placa_vehiculo} registrada en caseta para la orden {id_orden_vig}.")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("No se encontró la orden especificada en el sistema.")
+                except Exception as e:
+                    st.error(f"Error al registrar entrada: {e}")
+
+    with col_v2:
+        st.markdown("### 📤 Unidades en Planta / Finca")
+        if not df_of_vig.empty:
+            df_vig_activas = df_of_vig[df_of_vig['id_finca'].astype(str).str.upper() == finca_actual.upper()] if finca_actual.upper() != "TODAS" else df_of_vig
+            st.dataframe(df_vig_activas[['id_orden', 'id_finca', 'estado_carga', 'transportista']], use_container_width=True)
+        else:
+            st.info("No hay órdenes activas actualmente.")
+
+elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
+    st.markdown(f"<h2 style='color: #007bff;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
+    st.markdown("Control de cadena de frío, colocación de sellos, termógrafos y estiba en contenedor")
+
+    df_of_est, _ = get_df_safe("Orden_Fincas")
+    
+    id_orden_estiba = st.text_input("Seleccione o ingrese ID de Orden para Estiba", key="est_id_orden")
+    
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
+        temp_pulpa = st.number_input("Temperatura de Pulpa (°C)", value=13.5, step=0.1, key="est_temp")
+        num_termografo = st.text_input("Número de Termógrafo", key="est_termografo")
+    with col_e2:
+        num_sello = st.text_input("Número de Sello de Seguridad", key="est_sello")
+        observaciones_estiba = st.text_area("Observaciones de Estiba y Contenedor", key="est_obs")
+
+    if st.button("✅ GUARDAR DATOS DE ESTIBA Y SELLADO", type="primary", use_container_width=True, key="btn_guardar_estiba"):
+        try:
+            _, sh_e, _ = get_db()
+            nombres_h = [w.title for w in sh_e.worksheets()]
+            if "Control_Estiba" in nombres_h:
+                ws_es = sh_e.worksheet("Control_Estiba")
+            else:
+                ws_es = sh_e.add_worksheet(title="Control_Estiba", rows=1000, cols=15)
+
+            if not ws_es.get_all_values():
+                ws_es.append_row([
+                    "id_orden", "id_finca", "temperatura_pulpa", "termografo", 
+                    "sello", "observaciones", "fecha_registro", "usuario"
+                ])
+
+            dict_estiba = {
+                "id_orden": str(id_orden_estiba),
+                "id_finca": str(finca_actual),
+                "temperatura_pulpa": str(temp_pulpa),
+                "termografo": str(num_termografo),
+                "sello": str(num_sello),
+                "observaciones": str(observaciones_estiba),
+                "fecha_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "usuario": str(st.session_state.get("username", "estiba"))
+            }
+
+            ensure_columns_exist(ws_es, list(dict_estiba.keys()))
+            append_row_dict_safe(ws_es, dict_estiba)
             
-            if not info_orden and not df_pendientes.empty:
-                match_row = df_pendientes[df_pendientes['id_orden'].astype(str) == str(oc_sel)]
-                if not match_row.empty:
-                    info_orden = match_row.iloc[0].to_dict()
+            st.success("✅ Datos de estiba, sellos y temperatura guardados correctamente.")
+            time.sleep(1.2)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error al guardar estiba: {e}")
 
-        id_operador_raw = str(info_orden.get('id_operador', '')).strip()
-        id_tractor_raw = str(info_orden.get('id_tractor', '')).strip()
-        id_linea_raw = str(info_orden.get('id_linea', '')).strip()
-        id_caja1_raw = str(info_orden.get('id_caja1', '')).strip()
-
-        nombre_operador = id_operador_raw or "No especificado"
-        if not df_op_m.empty and id_operador_raw:
-            for idx, row in df_op_m.iterrows():
-                row_str = " ".join([str(val) for val in row.values])
-                if id_operador_raw.upper() in row_str.upper():
-                    posibles_textos = [str(val) for val in row.values if len(str(val)) > 5 and not str(val).isdigit() and not str(val).startswith('LIN-') and not str(val).startswith('OP')]
-                    if posibles_textos:
-                        nombre_operador = posibles_textos[0]
-                        break
-
-        nombre_linea = id_linea_raw or "No especificado"
-        if not df_lin_m.empty and id_linea_raw:
-            col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
-            col_nom_lin = next((c for c in df_lin_m.columns if 'razon' in c.lower() or 'nombre' in c.lower()), df_lin_m.columns[1] if len(df_lin_m.columns) > 1 else col_id_lin)
-            match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.strip().str.upper() == id_linea_raw.strip().upper()]
-            if not match_lin.empty:
-                nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
-
-        desc_tractor = id_tractor_raw or "No especificado"
-        placas_tractor = "No especificado"
-        if not df_tr_unif.empty and id_tractor_raw:
-            col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
-            match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
-            if not match_tr.empty:
-                r_tr = match_tr.iloc[0]
-                marca = str(r_tr.get('marca', r_tr.get('modelo_tractor', 'Unidad')))
-                modelo = str(r_tr.get('modelo', r_tr.get('anio', r_tr.get('año', ''))))
-                eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
-                
-                partes_tractor = [marca]
-                if modelo and modelo.lower() != 'nan':
-                    partes_tractor.append(f"mod {modelo}")
-                if eco and eco.lower() != 'nan':
-                    partes_tractor.append(f"(Eco: {eco})")
-                
-                desc_tractor = " ".join(partes_tractor)
-                placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
-
-        desc_caja1 = id_caja1_raw or "No especificado"
-        if not df_cj_unif.empty and id_caja1_raw:
-            col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
-            match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.strip().str.upper() == id_caja1_raw.strip().upper()]
-            if not match_cj.empty:
-                r_cj = match_cj.iloc[0]
-                placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
-                desc_caja1 = f"Caja Placa: {placa_cj}" if placa_cj else id_caja1_raw
-
-        st.markdown(
-            f"""
-            <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #28a745; margin-bottom: 15px;'>
-                <p style='margin: 0; font-weight: bold; color: #28a745; font-size: 16px;'>🔍 Datos para Corroboración en Caseta:</p>
-                <hr style='margin: 6px 0;'>
-                <p style='margin: 4px 0;'><b>👤 Operador :</b> {nombre_operador}</p>
-                <p style='margin: 4px 0;'><b>🚛 Unidad :</b> {desc_tractor}</p>
-                <p style='margin: 4px 0;'><b>🏷️ Placas tractor :</b> {placas_tractor}</p>
-                <p style='margin: 4px 0;'><b>📦 Caja :</b> {desc_caja1}</p>
-                <p style='margin: 4px 0;'><b>🏢 Linea :</b> {nombre_linea}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Panel de Validación Tecnológica:</p>", unsafe_allow_html=True)
-        val_coincide_ent = st.toggle("🟢 **¿Coincide la Placa / Guía Física?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_coincide_ent")
-        estado_verificacion = "SI" if val_coincide_ent else "NO"
-
-        if estado_verificacion == "SI":
-            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO: COINCIDENCIA VERIFICADA (ÓPTIMO)</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO: ALERTA DE DISCREPANCIA EN UNIDAD</div>", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE", key="vis_foto_tractor_rol")
-        foto_caja = st.camera_input("📷 FOTO 2 - CAJA TRASERA", key="vis_foto_caja_rol")
-        
-        if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_rol"):
-            try:
-                _, sh, _ = get_db()
-                nombres_hojas = [w.title for w in sh.worksheets()]
-                if "Bitacora_Vigilancia" in nombres_hojas:
-                    ws_v = sh.worksheet("Bitacora_Vigilancia")
-                else:
-                    ws_v = sh.add_worksheet(title="Bitacora_Vigilancia", rows=1000, cols=20)
-                
-                if not ws_v.get_all_values():
-                    ws_v.append_row([
-                        "id_bitacora", "id_orden", "id_finca", "tipo_movimiento", 
-                        "fecha_hora", "hora_manual", "odometro", "observaciones", 
-                        "id_usuario", "fotos_links", "tractor_foto", "caja_foto"
-                    ])
-
-                id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                dict_reg = {
-                    "id_bitacora": id_reg,
-                    "id_orden": str(oc_sel),
-                    "id_finca": str(finca_actual),
-                    "tipo_movimiento": "LLEGADO_CASETA",
-                    "fecha_hora": str(hora_dispositivo),
-                    "hora_manual": str(datetime.now().strftime('%H:%M:%S')),
-                    "odometro": "0",
-                    "observaciones": f"Unidad: {desc_tractor} | Placa: {placas_tractor} | Verificación Coincide ({estado_verificacion}) | Op: {nombre_operador}",
-                    "id_usuario": str(st.session_state.get("username", "vigilante")),
-                    "fotos_links": "PENDIENTE",
-                    "tractor_foto": "CARGADA" if foto_tractor is not None else "PENDIENTE",
-                    "caja_foto": "CARGADA" if foto_caja is not None else "PENDIENTE"
-                }
-                
-                ensure_columns_exist(ws_v, list(dict_reg.keys()))
-                append_row_dict_safe(ws_v, dict_reg)
-                
-                ws_of = sh.worksheet("Orden_Fincas")
-                all_of_records = ws_of.get_all_records()
-                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-                
-                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
-                    col_idx_estado = headers_of.index("estado_carga") + 1
-                    for idx, row in enumerate(all_of_records, start=2):
-                        if str(row.get("id_orden", "")).strip() == str(oc_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
-                            ws_of.update_cell(idx, col_idx_estado, "LLEGADO_CASETA")
-                            break
-                
-                st.cache_data.clear()
-                st.success(f"✅ ¡Entrada guardada con éxito a las {hora_dispositivo}!")
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al guardar: {e}")
-
-    with tab_sal:
-        st.markdown("<h3 style='color: #d9534f;'>SALIDA DE FINCA</h3>", unsafe_allow_html=True)
-        
-        df_salidas = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['LLEGADO_CASETA', 'EN_SITIO', 'EN FINCA'])] if not df_finca.empty else df_finca
-        lista_salidas = df_salidas['id_orden'].astype(str).tolist() if not df_salidas.empty else ["Sin unidades en sitio"]
-        
-        oc_sal_sel = st.selectbox("OC en Sitio:", lista_salidas, key="vis_oc_sal_sel_rol")
-        
-        placas_salida_sistema = "No especificada"
-        if oc_sal_sel != "Sin unidades en sitio" and not df_salidas.empty:
-            match_sal = df_salidas[df_salidas['id_orden'].astype(str) == str(oc_sal_sel)]
-            if not match_sal.empty:
-                r_sal = match_sal.iloc[0].to_dict()
-                id_tr_sal = str(r_sal.get('id_tractor', '')).strip()
-                if not df_tr_unif.empty and id_tr_sal:
-                    col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
-                    match_tr_s = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tr_sal.upper()]
-                    if not match_tr_s.empty:
-                        placas_salida_sistema = str(match_tr_s.iloc[0].get('placas', match_tr_s.iloc[0].get('placa', 'No especificada')))
-
-        st.markdown(
-            f"""
-            <div style='background-color: #f8f9fa; padding: 12px; border-radius: 8px; border: 2px solid #d9534f; margin-bottom: 12px;'>
-                <p style='margin: 0; font-weight: bold; color: #d9534f; font-size: 15px;'>🔍 Verificación de Salida:</p>
-                <p style='margin: 4px 0 0 0;'><b>🏷️ Placas registradas en sistema:</b> {placas_salida_sistema}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Panel de Validación de Salida:</p>", unsafe_allow_html=True)
-        val_coincide_sal = st.toggle("🟢 **¿Coincide la Placa / Guía de Salida?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_coincide_sal")
-        estado_verificacion_sal = "SI" if val_coincide_sal else "NO"
-
-        if estado_verificacion_sal == "SI":
-            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO: SALIDA AUTORIZADA (CONFORME)</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO: SALIDA CON DISCREPANCIA</div>", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        foto_tr_sal = st.camera_input("📷 FOTO SALIDA - TRACTOR FRENTE", key="vis_foto_tr_sal_rol")
-        foto_cj_sal = st.camera_input("📷 FOTO SALIDA - CAJA TRASERA", key="vis_foto_cj_sal_rol")
-        
-        if st.button("🚀 GUARDAR SALIDA", type="primary", use_container_width=True, key="btn_guardar_salida_rol"):
-            try:
-                _, sh, _ = get_db()
-                nombres_hojas = [w.title for w in sh.worksheets()]
-                if "Bitacora_Vigilancia" in nombres_hojas:
-                    ws_v = sh.worksheet("Bitacora_Vigilancia")
-                else:
-                    ws_v = sh.add_worksheet(title="Bitacora_Vigilancia", rows=1000, cols=20)
-                
-                if not ws_v.get_all_values():
-                    ws_v.append_row([
-                        "id_bitacora", "id_orden", "id_finca", "tipo_movimiento", 
-                        "fecha_hora", "hora_manual", "odometro", "observaciones", 
-                        "id_usuario", "fotos_links", "tractor_foto", "caja_foto"
-                    ])
-
-                id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                dict_reg_s = {
-                    "id_bitacora": id_reg_s,
-                    "id_orden": str(oc_sal_sel),
-                    "id_finca": str(finca_actual),
-                    "tipo_movimiento": "SALIDA_CASETA",
-                    "fecha_hora": str(hora_dispositivo),
-                    "hora_manual": str(datetime.now().strftime('%H:%M:%S')),
-                    "odometro": "0",
-                    "observaciones": f"Salida Finca {finca_actual} Verificación Coincide ({estado_verificacion_sal})",
-                    "id_usuario": str(st.session_state.get("username", "vigilante")),
-                    "fotos_links": "PENDIENTE",
-                    "tractor_foto": "CARGADA_SALIDA" if foto_tr_sal is not None else "PENDIENTE",
-                    "caja_foto": "CARGADA_SALIDA" if foto_cj_sal is not None else "PENDIENTE"
-                }
-                
-                ensure_columns_exist(ws_v, list(dict_reg_s.keys()))
-                append_row_dict_safe(ws_v, dict_reg_s)
-                
-                ws_of = sh.worksheet("Orden_Fincas")
-                all_of_records = ws_of.get_all_records()
-                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-                
-                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
-                    col_idx_estado = headers_of.index("estado_carga") + 1
-                    for idx, row in enumerate(all_of_records, start=2):
-                        val_ord = str(row.get("id_orden", "")).strip()
-                        val_fin = str(row.get("id_finca", "")).strip()
-                        
-                        if val_ord == str(oc_sal_sel) and val_fin.upper() == str(finca_actual).upper():
-                            ws_of.update_cell(idx, col_idx_estado, "SALIDA_FINCA")
-                            break
-                
-                st.cache_data.clear()
-                st.success(f"✅ ¡Salida de la finca {finca_actual} registrada con éxito a las {hora_dispositivo}!")
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al registrar salida: {e}")
-
-elif st.session_state.rol == "ESTIBA":
-    st.markdown(f"<h2 style='color: #ff9800;'>❄️ Módulo de Cámara (Jefe de Cámara / Estiba) - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
-    st.markdown("Control de Preenfriado, Sellos y Termógrafos por Orden de Carga")
+elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
+    st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {finca_actual}</h2>", unsafe_allow_html=True)
+    st.markdown("Control de Producción Diaria y Entrada a Inventario de Producto Terminado")
 
     df_of, _ = get_df_safe("Orden_Fincas")
-    finca_actual = str(st.session_state.finca_asignada)
-
-    if df_of.empty:
-        st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
-        df_finca = pd.DataFrame()
-    else:
-        df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
-
-    df_camara = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['LLEGADO_CASETA', 'EN_SITIO', 'EN FINCA', 'EN_CAMARA', 'ESTIBA'])] if not df_finca.empty else df_finca
-    st.metric("Unidades Disponibles en Cámara / Finca", len(df_camara))
-    st.dataframe(df_camara, use_container_width=True)
-
-    st.markdown("---")
-
-    tab_pre, tab_term = st.tabs(["🌡️ REGISTRAR PREENFRIADO Y SELLOS", "📦 VALIDACIÓN DE CARGA Y ESTIBA"])
-    hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    with tab_pre:
-        st.markdown("<h3 style='color: #ff9800;'>CONTROL DE PREENFRIADO Y CÁMARA</h3>", unsafe_allow_html=True)
-
-        lista_ocs_cam = df_camara['id_orden'].astype(str).tolist() if not df_camara.empty else ["Sin unidades en cámara"]
-        oc_cam_sel = st.selectbox("Seleccione la OC para Preenfriado:", lista_ocs_cam, key="est_oc_cam_sel")
-
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            temp_inicial = st.number_input("Temperatura Inicial (°C)", value=13.5, step=0.1, key="est_temp_ini")
-            sello_seguridad = st.text_input("Número de Sello de Seguridad", placeholder="Ej. SEL-99482", key="est_sello")
-        with col_p2:
-            termografo_id = st.text_input("ID / Código de Termógrafo", placeholder="Ej. TERM-0045", key="est_termografo")
-            finca_origen_real = st.text_input("Finca Origen (Cámara)", value=finca_actual, key="est_finca_origen")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        foto_termografo = st.camera_input("📷 FOTO - INSTALACIÓN DE TERMÓGRAFO", key="est_foto_termo")
-
-        if st.button("✅ GUARDAR PREENFRIADO Y SELLOS", type="primary", use_container_width=True, key="btn_guardar_preenfriado"):
-            try:
-                _, sh, _ = get_db()
-                nombres_hojas = [w.title for w in sh.worksheets()]
-                if "Bitacora_Camara" in nombres_hojas:
-                    ws_c = sh.worksheet("Bitacora_Camara")
-                else:
-                    ws_c = sh.add_worksheet(title="Bitacora_Camara", rows=1000, cols=20)
-
-                if not ws_c.get_all_values():
-                    ws_c.append_row([
-                        "id_bitacora_camara", "id_orden", "id_finca", "finca_origen", 
-                        "temperatura_inicial", "sello_seguridad", "termografo_id", 
-                        "fecha_hora", "id_usuario", "estado_proceso", "foto_termografo"
-                    ])
-
-                id_reg_c = f"CAM-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                dict_reg_c = {
-                    "id_bitacora_camara": id_reg_c,
-                    "id_orden": str(oc_cam_sel),
-                    "id_finca": str(finca_actual),
-                    "finca_origen": str(finca_origen_real),
-                    "temperatura_inicial": str(temp_inicial),
-                    "sello_seguridad": str(sello_seguridad),
-                    "termografo_id": str(termografo_id),
-                    "fecha_hora": str(hora_dispositivo),
-                    "id_usuario": str(st.session_state.get("username", "jefe_camara")),
-                    "estado_proceso": "PREENFRIADO_REGISTRADO",
-                    "foto_termografo": "CARGADA" if foto_termografo is not None else "PENDIENTE"
-                }
-
-                ensure_columns_exist(ws_c, list(dict_reg_c.keys()))
-                append_row_dict_safe(ws_c, dict_reg_c)
-
-                ws_of = sh.worksheet("Orden_Fincas")
-                all_of_records = ws_of.get_all_records()
-                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-
-                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
-                    col_idx_estado = headers_of.index("estado_carga") + 1
-                    for idx, row in enumerate(all_of_records, start=2):
-                        if str(row.get("id_orden", "")).strip() == str(oc_cam_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
-                            ws_of.update_cell(idx, col_idx_estado, "EN_CAMARA")
-                            break
-
-                st.cache_data.clear()
-                st.success(f"✅ ¡Preenfriado y sellos registrados con éxito para la OC {oc_cam_sel}!")
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al guardar datos de cámara: {e}")
-
-    with tab_term:
-        st.markdown("<h3 style='color: #ff9800;'>CIERRE DE ESTIBA Y LIBERACIÓN DE UNIDAD</h3>", unsafe_allow_html=True)
-
-        lista_ocs_est = df_camara['id_orden'].astype(str).tolist() if not df_camara.empty else ["Sin unidades para estiba"]
-        oc_est_sel = st.selectbox("Seleccione la OC para Liberación de Estiba:", lista_ocs_est, key="est_oc_liberacion_sel")
-
-        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Verificación Final de Inocuidad y Tarimas:</p>", unsafe_allow_html=True)
-        val_estiba_ok = st.toggle("🟢 **¿Estiba y empaque conformes sin daños físicos?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_estiba_ok")
-        estado_estiba_val = "CONFORME" if val_estiba_ok else "CON_INCIDENCIAS"
-
-        observaciones_estiba = st.text_area("Observaciones de la Estiba / Calidad de Carga", placeholder="Detalles de estiba, tarimas o estibas especiales...", key="est_obs")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        foto_estiba_final = st.camera_input("📷 FOTO - ESTIBA Y CARGA FINALIZADA", key="est_foto_final")
-
-        if st.button("🚀 FINALIZAR Y LIBERAR ESTIBA", type="primary", use_container_width=True, key="btn_guardar_estiba_final"):
-            try:
-                _, sh, _ = get_db()
-                ws_of = sh.worksheet("Orden_Fincas")
-                all_of_records = ws_of.get_all_records()
-                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-
-                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
-                    col_idx_estado = headers_of.index("estado_carga") + 1
-                    for idx, row in enumerate(all_of_records, start=2):
-                        if str(row.get("id_orden", "")).strip() == str(oc_est_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
-                            ws_of.update_cell(idx, col_idx_estado, "ESTIBA_LISTA")
-                            break
-
-                st.cache_data.clear()
-                st.success(f"✅ ¡Estiba liberada con éxito para la OC {oc_est_sel} a las {hora_dispositivo}!")
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al liberar estiba: {e}")
-
-elif st.session_state.rol in ["PLANTA", "JEFE_PLANTA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
-    st.markdown("Control de Producción, Empaque y Órdenes de Carga Abiertas")
-
-    df_of, _ = get_df_safe("Orden_Fincas")
-    finca_actual = str(st.session_state.finca_asignada)
 
     if df_of.empty:
         st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
@@ -1960,36 +1632,32 @@ elif st.session_state.rol in ["PLANTA", "JEFE_PLANTA"]:
         df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
 
     df_planta_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', 'LLEGADO_CASETA', 'EN_PROCESO', 'EN FINCA'])] if not df_finca.empty else df_finca
-    st.metric("Órdenes Abiertas / Disponibles en Planta", len(df_planta_pendientes))
+    st.metric("Órdenes Abiertas / Disponibles para Surtir", len(df_planta_pendientes))
     st.dataframe(df_planta_pendientes, use_container_width=True)
 
     st.markdown("---")
 
-    tab_prod, tab_cons = st.tabs(["📦 REGISTRAR PRODUCCIÓN Y EMPAQUE", "📊 HISTORIAL DE PRODUCCIÓN EN PLANTA"])
+    tab_prod, tab_cons = st.tabs(["📦 REGISTRAR PRODUCCIÓN DIARIA (INVENTARIO)", "📊 HISTORIAL DE PRODUCCIÓN EN PLANTA"])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with tab_prod:
-        st.markdown("<h3 style='color: #007bff;'>REGISTRO DE CAJAS Y PROCESO DE FRUTA</h3>", unsafe_allow_html=True)
-
-        lista_ocs_planta = df_planta_pendientes['id_orden'].astype(str).tolist() if not df_planta_pendientes.empty else ["Sin órdenes abiertas"]
-        oc_planta_sel = st.selectbox("Seleccione la Orden de Carga (OC):", lista_ocs_planta, key="planta_oc_sel")
+        st.markdown("<h3 style='color: #007bff;'>ENTRADA DE PRODUCTO TERMINADO AL INVENTARIO</h3>", unsafe_allow_html=True)
+        st.caption("💡 Puede registrar producción parcial o adelantada en caso de despachos urgentes sin saldo previo (los racimos cortados pueden dejarse en 0 si aún no se contabilizan).")
 
         col_pl1, col_pl2 = st.columns(2)
         with col_pl1:
-            total_cajas_empaque = st.number_input("Total de Cajas Empacadas", min_value=0, value=1080, step=10, key="planta_cajas")
-            racimos_procesados = st.number_input("Racimos Procesados", min_value=0, value=950, step=5, key="planta_racimos")
-            calibre_fruta = st.text_input("Calibre Promedio / Marca", value="39 - 46 (Tipo Exportación)", key="planta_calibre")
+            fecha_produccion = st.date_input("Fecha de Producción / Empaque", value=datetime.now().date(), key="planta_fecha_prod")
+            total_cajas_empaque = st.number_input("Total de Cajas Empacadas", min_value=0, value=0, step=10, key="planta_cajas")
         with col_pl2:
-            cajas_rechazadas = st.number_input("Cajas Rechazadas / Merma", min_value=0, value=0, step=1, key="planta_rechazo")
+            racimos_procesados = st.number_input("Racimos Procesados (Cortados - Opcional)", min_value=0, value=0, step=5, key="planta_racimos")
             peso_neto_caja = st.number_input("Peso Neto por Caja (Kg)", value=19.5, step=0.1, key="planta_peso")
-            turno_produccion = st.selectbox("Turno de Empaque", ["TURNO 1 (Matutino)", "TURNO 2 (Vespertino)"], key="planta_turno")
 
-        observaciones_planta = st.text_area("Observaciones de Calidad o Proceso en Planta", placeholder="Detalles de empaque, sellos de calidad, incidencias...", key="planta_obs")
+        observaciones_planta = st.text_area("Observaciones de la Jornada / Despacho Urgente", placeholder="Detalles de empaque, despacho sin saldo previo...", key="planta_obs")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        foto_produccion = st.camera_input("📷 FOTO - PALETIZADO / CONTROL DE CALIDAD PLANTA", key="planta_foto_evidencia")
+        foto_produccion = st.camera_input("📷 FOTO - PALETIZADO / REGISTRO DIARIO PLANTA", key="planta_foto_evidencia")
 
-        if st.button("✅ GUARDAR REGISTRO DE PRODUCCIÓN", type="primary", use_container_width=True, key="btn_guardar_produccion"):
+        if st.button("✅ GUARDAR PRODUCCIÓN DIARIA EN INVENTARIO", type="primary", use_container_width=True, key="btn_guardar_produccion"):
             try:
                 _, sh, _ = get_db()
                 nombres_hojas = [w.title for w in sh.worksheets()]
@@ -2000,44 +1668,30 @@ elif st.session_state.rol in ["PLANTA", "JEFE_PLANTA"]:
 
                 if not ws_p.get_all_values():
                     ws_p.append_row([
-                        "id_produccion", "id_orden", "id_finca", "total_cajas", 
-                        "racimos_procesados", "calibre", "cajas_rechazadas", 
-                        "peso_neto_caja", "turno", "observaciones", "fecha_hora", "id_usuario", "estado_proceso"
+                        "id_produccion", "fecha_produccion", "id_finca", "total_cajas", 
+                        "racimos_procesados", "peso_neto_caja", "observaciones", 
+                        "fecha_registro", "id_usuario", "estado_proceso"
                     ])
 
                 id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 dict_reg_p = {
                     "id_produccion": id_reg_p,
-                    "id_orden": str(oc_planta_sel),
+                    "fecha_produccion": str(fecha_produccion),
                     "id_finca": str(finca_actual),
                     "total_cajas": str(total_cajas_empaque),
                     "racimos_procesados": str(racimos_procesados),
-                    "calibre": str(calibre_fruta),
-                    "cajas_rechazadas": str(cajas_rechazadas),
                     "peso_neto_caja": str(peso_neto_caja),
-                    "turno": str(turno_produccion),
                     "observaciones": str(observaciones_planta),
-                    "fecha_hora": str(hora_dispositivo),
+                    "fecha_registro": str(hora_dispositivo),
                     "id_usuario": str(st.session_state.get("username", "jefe_planta")),
-                    "estado_proceso": "PRODUCCION_REGISTRADA"
+                    "estado_proceso": "INVENTARIO_TERMINADO"
                 }
 
                 ensure_columns_exist(ws_p, list(dict_reg_p.keys()))
                 append_row_dict_safe(ws_p, dict_reg_p)
 
-                ws_of = sh.worksheet("Orden_Fincas")
-                all_of_records = ws_of.get_all_records()
-                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-
-                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
-                    col_idx_estado = headers_of.index("estado_carga") + 1
-                    for idx, row in enumerate(all_of_records, start=2):
-                        if str(row.get("id_orden", "")).strip() == str(oc_planta_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
-                            ws_of.update_cell(idx, col_idx_estado, "EN_CAMARA")
-                            break
-
                 st.cache_data.clear()
-                st.success(f"✅ ¡Producción registrada con éxito para la OC {oc_planta_sel}! Unidad enviada a cámara.")
+                st.success(f"✅ ¡Producción del día {fecha_produccion} registrada con éxito en el inventario de planta!")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
