@@ -1443,36 +1443,39 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             st.markdown("---")
             st.markdown("#### ⚙️ Filtros Operativos de Seguimiento")
 
+            # Detectar dinámicamente la columna de finca o cliente/destino si finca no existe directamente
+            col_finca_valida = next((c for c in ['finca', 'nombre_finca', 'id_finca', 'empresa', 'id_cliente'] if c in df_seguimiento.columns), None)
+            col_estado_valida = next((c for c in ['estado', 'estatus', 'status'] if c in df_seguimiento.columns), None)
+
             col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
-                fincas_lista = ["TODOS"] + sorted(df_seguimiento['finca'].dropna().astype(str).unique().tolist()) if 'finca' in df_seguimiento.columns else ["TODOS"]
-                filtro_seg_finca = st.selectbox("Finca / Productor", fincas_lista, key="seg_filtro_finca")
+                fincas_lista = ["TODOS"] + sorted(df_seguimiento[col_finca_valida].dropna().astype(str).unique().tolist()) if col_finca_valida else ["TODOS"]
+                filtro_seg_finca = st.selectbox("Finca / Productor / Cliente", fincas_lista, key="seg_filtro_finca")
             with col_s2:
-                estados_seg_lista = ["TODOS"] + sorted(df_seguimiento['estado'].dropna().astype(str).unique().tolist()) if 'estado' in df_seguimiento.columns else ["TODOS", "EXPEDIDA", "ACTIVA", "CARGANDO"]
+                estados_seg_lista = ["TODOS"] + sorted(df_seguimiento[col_estado_valida].dropna().astype(str).unique().tolist()) if col_estado_valida else ["TODOS", "EXPEDIDA", "ACTIVA", "CARGANDO"]
                 filtro_seg_estado = st.selectbox("Estatus de Carga", estados_seg_lista, key="seg_filtro_estado")
             with col_s3:
-                buscar_folio = st.text_input("Buscar Folio / Tractor", placeholder="Ej: OC-2026 o OP00012", key="seg_buscar_folio")
+                buscar_folio = st.text_input("Buscar Folio / Tractor / Caja", placeholder="Ej: OC-2026 o C-0001", key="seg_buscar_folio")
 
             df_filtrado = df_seguimiento.copy()
-            if filtro_seg_finca != "TODOS" and 'finca' in df_filtrado.columns:
-                df_filtrado = df_filtrado[df_filtrado['finca'].astype(str).str.upper() == filtro_seg_finca.upper()]
-            if filtro_seg_estado != "TODOS" and 'estado' in df_filtrado.columns:
-                df_filtrado = df_filtrado[df_filtrado['estado'].astype(str).str.upper() == filtro_seg_estado.upper()]
+            if filtro_seg_finca != "TODOS" and col_finca_valida:
+                df_filtrado = df_filtrado[df_filtrado[col_finca_valida].astype(str).str.upper() == filtro_seg_finca.upper()]
+            if filtro_seg_estado != "TODOS" and col_estado_valida:
+                df_filtrado = df_filtrado[df_filtrado[col_estado_valida].astype(str).str.upper() == filtro_seg_estado.upper()]
             if buscar_folio.strip():
-                cols_str = [c for c in ['folio_orden', 'id_orden', 'id_tractor', 'id_operador'] if c in df_filtrado.columns]
+                cols_str = [c for c in ['folio_orden', 'id_orden', 'id_tractor', 'id_operador', 'id_caja1', 'id_caja2'] if c in df_filtrado.columns]
                 if cols_str:
                     mask = df_filtrado[cols_str].astype(str).apply(lambda x: x.str.contains(buscar_folio.strip(), case=False, na=False)).any(axis=1)
                     df_filtrado = df_filtrado[mask]
 
             st.markdown("---")
-            st.markdown("#### 📊 Indicadores Clave de Carga por Finca (KPIs)")
+            st.markdown("#### 📊 Indicadores Clave de Carga (KPIs)")
 
             total_ordenes_finca = len(df_filtrado)
+            col_cajas_valida = next((c for c in ['total_cajas', 'cantidad_cajas', 'cajas'] if c in df_filtrado.columns), None)
             total_cajas_finca = 0
-            if 'total_cajas' in df_filtrado.columns:
-                total_cajas_finca = pd.to_numeric(df_filtrado['total_cajas'], errors='coerce').sum()
-            elif 'cantidad_cajas' in df_filtrado.columns:
-                total_cajas_finca = pd.to_numeric(df_filtrado['cantidad_cajas'], errors='coerce').sum()
+            if col_cajas_valida:
+                total_cajas_finca = pd.to_numeric(df_filtrado[col_cajas_valida], errors='coerce').sum()
 
             ms1, ms2, ms3, ms4 = st.columns(4)
             with ms1:
@@ -1480,7 +1483,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             with ms2:
                 st.metric(label="📦 Cajas Acumuladas", value=f"{int(total_cajas_finca):,}" if total_cajas_finca else "N/D")
             with ms3:
-                st.metric(label="🏢 Finca Seleccionada", value=filtro_seg_finca)
+                st.metric(label="🏢 Selección", value=filtro_seg_finca)
             with ms4:
                 st.metric(label="📌 Estatus", value=filtro_seg_estado)
 
@@ -1502,7 +1505,25 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 if orden_seleccionada:
                     df_detalle_orden = df_filtrado[df_filtrado[id_col_valida].astype(str) == orden_seleccionada]
                     if not df_detalle_orden.empty:
-                        st.json(df_detalle_orden.iloc[0].to_dict())            
+                        reg_dict = df_detalle_orden.iloc[0].to_dict()
+                        
+                        # Mostrar de forma visual y ordenada los datos de la unidad en lugar de solo JSON plano
+                        dcol1, dcol2, dcol3 = st.columns(3)
+                        with dcol1:
+                            st.markdown(f"**Folio / Orden:** {reg_dict.get('folio_orden', reg_dict.get('id_orden', 'N/D'))}")
+                            st.markdown(f"**Operador:** {reg_dict.get('id_operador', 'N/D')}")
+                            st.markdown(f"**Tractor:** {reg_dict.get('id_tractor', 'N/D')}")
+                        with dcol2:
+                            st.markdown(f"**Caja 1:** {reg_dict.get('id_caja1', 'N/D')}")
+                            st.markdown(f"**Caja 2:** {reg_dict.get('id_caja2', 'N/D')}")
+                            st.markdown(f"**Línea / Ruta:** {reg_dict.get('id_linea', 'N/D')}")
+                        with dcol3:
+                            st.markdown(f"**Cliente / Finca:** {reg_dict.get('id_cliente', reg_dict.get('finca', 'N/D'))}")
+                            st.markdown(f"**Destino:** {reg_dict.get('id_destino', 'N/D')}")
+                            st.markdown(f"**Factura:** {reg_dict.get('folio_factura', 'N/D')}")
+                        
+                        with st.expander("Ver estructura completa en JSON"):
+                            st.json(reg_dict)            
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
