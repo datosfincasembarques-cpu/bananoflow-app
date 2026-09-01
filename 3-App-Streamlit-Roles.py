@@ -1527,8 +1527,44 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 rol_actual = str(st.session_state.get("rol", "")).upper()
 finca_actual = str(st.session_state.get("finca_asignada", "TODAS"))
 
+# Estilo visual atractivo en tonos verdes (Emerald / Forest Theme) para una experiencia única
+st.markdown("""
+    <style>
+    .verde-banner {
+        background: linear-gradient(135deg, #134e2b 0%, #28a745 100%);
+        padding: 20px;
+        border-radius: 12px;
+        color: white;
+        text-align: center;
+        margin-bottom: 25px;
+        box-shadow: 0 6px 12px rgba(40, 167, 69, 0.15);
+    }
+    .verde-banner h2 {
+        color: white !important;
+        margin-bottom: 5px;
+    }
+    .verde-card {
+        background-color: #f4fbf7;
+        border: 1px solid #c3e6cb;
+        border-left: 5px solid #28a745;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(40, 167, 69, 0.05);
+    }
+    .metric-box {
+        background-color: #ffffff;
+        border: 2px solid #d4edda;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 if rol_actual in ["VIGILANCIA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>🛡️ Módulo de Vigilancia - Control de Accesos ({finca_actual})</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - Control de Accesos ({finca_actual})</h2>", unsafe_allow_html=True)
     st.markdown("Control de acceso de unidades programadas y vehículos de Fruta de Tercera (Sin Orden previa)")
 
     df_of_vig, _ = get_df_safe("Orden_Fincas")
@@ -1633,7 +1669,7 @@ if rol_actual in ["VIGILANCIA"]:
                         st.error(f"Error al registrar ingreso en caseta: {e}")
 
 elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: #28a745;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
     st.markdown("Control de cadena de frío, colocación de sellos, termógrafos y estiba en contenedor")
 
     df_of_est, _ = get_df_safe("Orden_Fincas")
@@ -1684,108 +1720,126 @@ elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
             st.error(f"Error al guardar estiba: {e}")
 
 elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {finca_actual}</h2>", unsafe_allow_html=True)
-    st.markdown("Control de Producción Diaria (Inventario) y Despachos de Fruta de Tercera")
-
-    st.markdown("---")
+    st.markdown("""
+        <div class="verde-banner">
+            <h2>🏭 Módulo de Planta & Control de Inventario</h2>
+            <p>Registro tabular dinámico de producción, existencias y despachos con total control operativo</p>
+        </div>
+    """, unsafe_allow_html=True)
 
     tab_prod, tab_tercera, tab_cons = st.tabs([
-        "📦 REGISTRAR PRODUCCIÓN DETALLADA", 
+        "📋 CAPTURA TABULAR & SALDOS", 
         "🚚 GESTIÓN Y DESPACHO FRUTA DE TERCERA", 
         "📊 HISTORIAL GENERAL EN PLANTA"
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with tab_prod:
-        st.markdown("<h3 style='color: #007bff;'>ENTRADA A INVENTARIO - PRODUCCIÓN DIARIA DETALLADA</h3>", unsafe_allow_html=True)
-        st.caption("💡 Permite registrar producción parcial o total (ideal para tener saldos disponibles al cargar camiones a mediodía o durante la semana).")
+        st.markdown("### 🌿 Captura Tabular de Producción Diaria y Existencias")
+        st.caption("✨ Seleccione la fecha como dato principal y agregue filas interactivas por cantidad, calidad, cartón/marca y cliente/finca para calcular existencias al instante.")
 
-        fecha_produccion = st.date_input("Fecha de Producción / Registro", value=datetime.now().date(), key="planta_fecha_prod")
+        # Fecha principal compartida para toda la sesión de captura del día
+        fecha_captura = st.date_input("📅 Fecha Principal de Producción / Carga", value=datetime.now().date(), key="tab_fecha_principal")
+
+        # Inicializar estado para la tabla interactiva de captura
+        if "rows_captura" not in st.session_state:
+            st.session_state.rows_captura = [
+                {"cantidad": 1000.0, "calidad": "1ra - Carmelita", "carton": "Bravo brand", "cliente": "General / Inventario"},
+                {"cantidad": 50.0, "calidad": "2ra - Chava", "carton": "Bravo brand", "cliente": "General / Inventario"}
+            ]
+
+        # Editor de datos tabular interactivo (Streamlit data_editor)
+        import pandas as pd
+        df_template = pd.DataFrame(st.session_state.rows_captura)
         
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            st.markdown("#### 🟢 PRIMERA")
-            p_1ra_carmelita = st.number_input("Carmelita (1ra)", min_value=0.0, value=0.0, step=1.0, key="p_1ra_carmelita")
-            p_1ra_adela = st.number_input("Adela (1ra)", min_value=0.0, value=0.0, step=1.0, key="p_1ra_adela")
-            p_1ra_don_hugo = st.number_input("Don Hugo (1ra)", min_value=0.0, value=0.0, step=1.0, key="p_1ra_don_hugo")
-            p_1ra_manitas = st.number_input("Manitas (1ra)", min_value=0.0, value=0.0, step=1.0, key="p_1ra_manitas")
+        # Opciones predefinidas para validación visual y consistencia
+        calidades_opciones = ["1ra - Carmelita", "1ra - Adela", "1ra - Don Hugo", "1ra - Manitas", "2ra - Chava", "2ra - Manitas", "Dedo Suelto", "Desperdicio"]
+        cartones_opciones = ["Bravo brand", "Otra Marca", "Genérico", "Sin Cartón"]
 
-        with col_p2:
-            st.markdown("#### 🟡 SEGUNDA & DEDO SUELTO")
-            p_2da_chava = st.number_input("Chava (2da)", min_value=0.0, value=0.0, step=1.0, key="p_2da_chava")
-            p_2da_manitas = st.number_input("Manitas (2da)", min_value=0.0, value=0.0, step=1.0, key="p_2da_manitas")
-            p_dedo_suelto = st.number_input("Dedo Suelto (Genérico)", min_value=0.0, value=0.0, step=1.0, key="p_dedo_suelto")
-            racimos_procesados = st.number_input("Racimos Procesados (Cortados)", min_value=0, value=0, step=1, key="planta_racimos")
+        st.markdown("👇 **Agregue, edite o modifique los registros directamente en la tabla:**")
+        edited_df = st.data_editor(
+            df_template,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "cantidad": st.column_config.NumberColumn("Cantidad (Cajas)", min_value=0.0, step=1.0, format="%.0f"),
+                "calidad": st.column_config.SelectboxColumn("Calidad", options=calidades_opciones, required=True),
+                "carton": st.column_config.SelectboxColumn("Cartón / Marca", options=cartones_opciones, required=True),
+                "cliente": st.column_config.TextColumn("Cliente / Destino / Finca", required=True)
+            },
+            key="editor_produccion_tabular"
+        )
 
-        with col_p3:
-            st.markdown("#### 🔴 DESPERDICIO")
-            p_desp_ms = st.number_input("MS", min_value=0.0, value=0.0, step=1.0, key="p_desp_ms")
-            p_desp_eu = st.number_input("EU", min_value=0.0, value=0.0, step=1.0, key="p_desp_eu")
-            p_desp_tp = st.number_input("TP", min_value=0.0, value=0.0, step=1.0, key="p_desp_tp")
-            p_desp_au = st.number_input("AU", min_value=0.0, value=0.0, step=1.0, key="p_desp_au")
-            p_desp_ll = st.number_input("LL", min_value=0.0, value=0.0, step=1.0, key="p_desp_ll")
-            p_desp_of = st.number_input("OF", min_value=0.0, value=0.0, step=1.0, key="p_desp_of")
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        observaciones_planta = st.text_area("Observaciones de la Jornada / Registro Parcial", placeholder="Detalles de cosecha, turno o motivo de registro anticipado...", key="planta_obs")
+        # Panel de Existencias Calculadas en Tiempo Real
+        st.markdown("### 📊 Existencias y Saldos Calculados (En Vivo)")
+        if not edited_df.empty:
+            # Calcular totales agrupados por calidad y cartón
+            df_resumen = edited_df.groupby(["calidad", "carton"], as_index=False)["cantidad"].sum()
+            
+            cols_metricas = st.columns(min(len(df_resumen), 4) if not df_resumen.empty else 1)
+            for idx, row in df_resumen.iterrows():
+                col_target = cols_metricas[idx % len(cols_metricas)]
+                with col_target:
+                    st.markdown(f"""
+                        <div class="metric-box">
+                            <span style="font-size: 0.85rem; color: #155724; font-weight: bold;">{row['calidad']}</span><br>
+                            <span style="font-size: 0.75rem; color: #6c757d;">{row['carton']}</span><br>
+                            <span style="font-size: 1.4rem; color: #28a745; font-weight: 800;">{row['cantidad']:,.0f} cjs</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+        else:
+            st.info("💡 Ingrese datos en la tabla superior para ver las existencias calculadas al instante.")
 
-        if st.button("✅ GUARDAR ENTRADA A INVENTARIO", type="primary", use_container_width=True, key="btn_guardar_produccion"):
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("🚀 GUARDAR Y ACTUALIZAR SALDOS EN INVENTARIO", type="primary", use_container_width=True, key="btn_guardar_tabular"):
             try:
                 _, sh, _ = get_db()
                 nombres_hojas = [w.title for w in sh.worksheets()]
                 if "Produccion_Planta" in nombres_hojas:
                     ws_p = sh.worksheet("Produccion_Planta")
                 else:
-                    ws_p = sh.add_worksheet(title="Produccion_Planta", rows=1000, cols=25)
+                    ws_p = sh.add_worksheet(title="Produccion_Planta", rows=1000, cols=15)
 
                 headers_prod = [
                     "id_produccion", "fecha_produccion", "id_finca", 
-                    "p_1ra_carmelita", "p_1ra_adela", "p_1ra_don_hugo", "p_1ra_manitas",
-                    "p_2da_chava", "p_2da_manitas", "p_dedo_suelto", 
-                    "p_desp_ms", "p_desp_eu", "p_desp_tp", "p_desp_au", "p_desp_ll", "p_desp_of",
-                    "racimos_procesados", "observaciones", "fecha_registro", "id_usuario", "estado_proceso"
+                    "cantidad", "calidad", "carton", "cliente", 
+                    "fecha_registro", "id_usuario", "estado_proceso"
                 ]
 
                 if not ws_p.get_all_values():
                     ws_p.append_row(headers_prod)
 
-                id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                dict_reg_p = {
-                    "id_produccion": id_reg_p,
-                    "fecha_produccion": str(fecha_produccion),
-                    "id_finca": str(finca_actual),
-                    "p_1ra_carmelita": str(p_1ra_carmelita),
-                    "p_1ra_adela": str(p_1ra_adela),
-                    "p_1ra_don_hugo": str(p_1ra_don_hugo),
-                    "p_1ra_manitas": str(p_1ra_manitas),
-                    "p_2da_chava": str(p_2da_chava),
-                    "p_2da_manitas": str(p_2da_manitas),
-                    "p_dedo_suelto": str(p_dedo_suelto),
-                    "p_desp_ms": str(p_desp_ms),
-                    "p_desp_eu": str(p_desp_eu),
-                    "p_desp_tp": str(p_desp_tp),
-                    "p_desp_au": str(p_desp_au),
-                    "p_desp_ll": str(p_desp_ll),
-                    "p_desp_of": str(p_desp_of),
-                    "racimos_procesados": str(racimos_procesados),
-                    "observaciones": str(observaciones_planta),
-                    "fecha_registro": str(hora_dispositivo),
-                    "id_usuario": str(st.session_state.get("username", "jefe_planta")),
-                    "estado_proceso": "REGISTRO_ACTIVO"
-                }
-
-                ensure_columns_exist(ws_p, list(dict_reg_p.keys()))
-                append_row_dict_safe(ws_p, dict_reg_p)
+                # Guardar cada fila editada de la tabla
+                for _, row in edited_df.iterrows():
+                    id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{int(row.name)}"
+                    dict_reg_p = {
+                        "id_produccion": id_reg_p,
+                        "fecha_produccion": str(fecha_captura),
+                        "id_finca": str(finca_actual),
+                        "cantidad": str(row["cantidad"]),
+                        "calidad": str(row["calidad"]),
+                        "carton": str(row["carton"]),
+                        "cliente": str(row["cliente"]),
+                        "fecha_registro": str(hora_dispositivo),
+                        "id_usuario": str(st.session_state.get("username", "jefe_planta")),
+                        "estado_proceso": "REGISTRO_TABULAR"
+                    }
+                    ensure_columns_exist(ws_p, list(dict_reg_p.keys()))
+                    append_row_dict_safe(ws_p, dict_reg_p)
 
                 st.cache_data.clear()
-                st.success(f"✅ ¡Producción del día {fecha_produccion} guardada con éxito (saldos actualizados)!")
+                st.success(f"🌱 ¡Captura tabular para la fecha {fecha_captura} guardada con éxito y saldos actualizados!")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
-                st.error(f"Error al guardar la producción: {e}")
+                st.error(f"Error al guardar la producción tabular: {e}")
 
     with tab_tercera:
-        st.markdown("<h3 style='color: #007bff;'>GESTIÓN Y CIERRE DE DESPACHO - FRUTA DE TERCERA (SIN ORDEN)</h3>", unsafe_allow_html=True)
-        st.caption("💡 Complete los datos de rejas plásticas, cantidad y cliente para los vehículos que ingresaron desde caseta sin orden previa, y registre la salida con foto.")
+        st.markdown("<h3 style='color: #28a745;'>🚚 GESTIÓN Y CIERRE DE DESPACHO - FRUTA DE TERCERA (SIN ORDEN)</h3>", unsafe_allow_html=True)
+        st.caption("💡 Complete los datos de rejas plásticas, cantidad y cliente para los vehículos que ingresaron desde caseta sin orden previa, y registre la salida.")
 
         df_terc_act, _ = get_df_safe("Despachos_Tercera")
         if not df_terc_act.empty and 'estado_despacho' in df_terc_act.columns:
@@ -1802,9 +1856,6 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 with col_dt2:
                     cliente_final = st.text_input("Cliente Confirmado", key="planta_cliente_tercera")
                     obs_planta_tercera = st.text_area("Observaciones del Jefe de Planta", key="planta_obs_tercera")
-
-                st.markdown("📷 **Evidencia Fotográfica de Salida (Cierre de Unidad)**")
-                foto_salida_tercera = st.camera_input("Foto Salida del Vehículo", key="planta_foto_salida_tercera")
 
                 if st.button("✅ CERRAR Y REGISTRAR SALIDA DE DESPACHO DE TERCERA", type="primary", use_container_width=True, key="btn_cerrar_tercera"):
                     try:
@@ -1836,9 +1887,9 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             st.info("No hay registros de ingresos de fruta de tercera en el sistema.")
 
     with tab_cons:
-        st.markdown("<h3 style='color: #007bff;'>HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #28a745;'>📊 HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
         
-        st.markdown("#### 📦 Producción (Inventario Detallado)")
+        st.markdown("#### 📦 Producción (Inventario Tabular)")
         df_prod_hist, _ = get_df_safe("Produccion_Planta")
         if not df_prod_hist.empty:
             df_prod_finca = df_prod_hist if finca_actual.upper() == "TODAS" else df_prod_hist[df_prod_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
