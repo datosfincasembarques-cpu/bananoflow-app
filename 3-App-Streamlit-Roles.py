@@ -1521,7 +1521,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.metric(label="📌 Estatus", value=filtro_seg_estado)
                             
 # ==============================================================================
-# 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS: VIGILANCIA Y ESTIBA)
+# 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES: VIGILANCIA, ESTIBA, PLANTA)
 # ==============================================================================
 if st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
@@ -1659,9 +1659,9 @@ if st.session_state.rol == "VIGILANCIA":
         estado_verificacion = "SI" if val_coincide_ent else "NO"
 
         if estado_verificacion == "SI":
-            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO FUTURISTA: COINCIDENCIA VERIFICADA (ÓPTIMO)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO: COINCIDENCIA VERIFICADA (ÓPTIMO)</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO FUTURISTA: ALERTA DE DISCREPANCIA EN UNIDAD</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO: ALERTA DE DISCREPANCIA EN UNIDAD</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE", key="vis_foto_tractor_rol")
@@ -1688,7 +1688,7 @@ if st.session_state.rol == "VIGILANCIA":
                     "id_bitacora": id_reg,
                     "id_orden": str(oc_sel),
                     "id_finca": str(finca_actual),
-                    "tipo_movimiento": "LLEGADA_CASETA",
+                    "tipo_movimiento": "LLEGADO_CASETA",
                     "fecha_hora": str(hora_dispositivo),
                     "hora_manual": str(datetime.now().strftime('%H:%M:%S')),
                     "odometro": "0",
@@ -1755,9 +1755,9 @@ if st.session_state.rol == "VIGILANCIA":
         estado_verificacion_sal = "SI" if val_coincide_sal else "NO"
 
         if estado_verificacion_sal == "SI":
-            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO FUTURISTA: SALIDA AUTORIZADA (CONFORME)</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #e8f5e9; border-left: 5px solid #28a745; border-radius: 4px; color: #2e7d32; font-size: 13px; font-weight: 700;'>🟢 ESTADO: SALIDA AUTORIZADA (CONFORME)</div>", unsafe_allow_html=True)
         else:
-            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO FUTURISTA: SALIDA CON DISCREPANCIA</div>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 10px; background: #ffebee; border-left: 5px solid #d9534f; border-radius: 4px; color: #c62828; font-size: 13px; font-weight: 700;'>🔴 ESTADO: SALIDA CON DISCREPANCIA</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         foto_tr_sal = st.camera_input("📷 FOTO SALIDA - TRACTOR FRENTE", key="vis_foto_tr_sal_rol")
@@ -1945,3 +1945,109 @@ elif st.session_state.rol == "ESTIBA":
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al liberar estiba: {e}")
+
+elif st.session_state.rol == "PLANTA":
+    st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
+    st.markdown("Control de Producción, Empaque y Órdenes de Carga Abiertas")
+
+    df_of, _ = get_df_safe("Orden_Fincas")
+    finca_actual = str(st.session_state.finca_asignada)
+
+    if df_of.empty:
+        st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
+        df_finca = pd.DataFrame()
+    else:
+        df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
+
+    df_planta_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', 'LLEGADO_CASETA', 'EN_PROCESO', 'EN FINCA'])] if not df_finca.empty else df_finca
+    st.metric("Órdenes Abiertas / Disponibles en Planta", len(df_planta_pendientes))
+    st.dataframe(df_planta_pendientes, use_container_width=True)
+
+    st.markdown("---")
+
+    tab_prod, tab_cons = st.tabs(["📦 REGISTRAR PRODUCCIÓN Y EMPAQUE", "📊 HISTORIAL DE PRODUCCIÓN EN PLANTA"])
+    hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with tab_prod:
+        st.markdown("<h3 style='color: #007bff;'>REGISTRO DE CAJAS Y PROCESO DE FRUTA</h3>", unsafe_allow_html=True)
+
+        lista_ocs_planta = df_planta_pendientes['id_orden'].astype(str).tolist() if not df_planta_pendientes.empty else ["Sin órdenes abiertas"]
+        oc_planta_sel = st.selectbox("Seleccione la Orden de Carga (OC):", lista_ocs_planta, key="planta_oc_sel")
+
+        col_pl1, col_pl2 = st.columns(2)
+        with col_pl1:
+            total_cajas_empaque = st.number_input("Total de Cajas Empacadas", min_value=0, value=1080, step=10, key="planta_cajas")
+            racimos_procesados = st.number_input("Racimos Procesados", min_value=0, value=950, step=5, key="planta_racimos")
+            calibre_fruta = st.text_input("Calibre Promedio / Marca", value="39 - 46 (Tipo Exportación)", key="planta_calibre")
+        with col_pl2:
+            cajas_rechazadas = st.number_input("Cajas Rechazadas / Merma", min_value=0, value=0, step=1, key="planta_rechazo")
+            peso_neto_caja = st.number_input("Peso Neto por Caja (Kg)", value=19.5, step=0.1, key="planta_peso")
+            turno_produccion = st.selectbox("Turno de Empaque", ["TURNO 1 (Matutino)", "TURNO 2 (Vespertino)"], key="planta_turno")
+
+        observaciones_planta = st.text_area("Observaciones de Calidad o Proceso en Planta", placeholder="Detalles de empaque, sellos de calidad, incidencias...", key="planta_obs")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        foto_produccion = st.camera_input("📷 FOTO - PALETIZADO / CONTROL DE CALIDAD PLANTA", key="planta_foto_evidencia")
+
+        if st.button("✅ GUARDAR REGISTRO DE PRODUCCIÓN", type="primary", use_container_width=True, key="btn_guardar_produccion"):
+            try:
+                _, sh, _ = get_db()
+                nombres_hojas = [w.title for w in sh.worksheets()]
+                if "Produccion_Planta" in nombres_hojas:
+                    ws_p = sh.worksheet("Produccion_Planta")
+                else:
+                    ws_p = sh.add_worksheet(title="Produccion_Planta", rows=1000, cols=20)
+
+                if not ws_p.get_all_values():
+                    ws_p.append_row([
+                        "id_produccion", "id_orden", "id_finca", "total_cajas", 
+                        "racimos_procesados", "calibre", "cajas_rechazadas", 
+                        "peso_neto_caja", "turno", "observaciones", "fecha_hora", "id_usuario", "estado_proceso"
+                    ])
+
+                id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                dict_reg_p = {
+                    "id_produccion": id_reg_p,
+                    "id_orden": str(oc_planta_sel),
+                    "id_finca": str(finca_actual),
+                    "total_cajas": str(total_cajas_empaque),
+                    "racimos_procesados": str(racimos_procesados),
+                    "calibre": str(calibre_fruta),
+                    "cajas_rechazadas": str(cajas_rechazadas),
+                    "peso_neto_caja": str(peso_neto_caja),
+                    "turno": str(turno_produccion),
+                    "observaciones": str(observaciones_planta),
+                    "fecha_hora": str(hora_dispositivo),
+                    "id_usuario": str(st.session_state.get("username", "jefe_planta")),
+                    "estado_proceso": "PRODUCCION_REGISTRADA"
+                }
+
+                ensure_columns_exist(ws_p, list(dict_reg_p.keys()))
+                append_row_dict_safe(ws_p, dict_reg_p)
+
+                ws_of = sh.worksheet("Orden_Fincas")
+                all_of_records = ws_of.get_all_records()
+                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
+
+                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
+                    col_idx_estado = headers_of.index("estado_carga") + 1
+                    for idx, row in enumerate(all_of_records, start=2):
+                        if str(row.get("id_orden", "")).strip() == str(oc_planta_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
+                            ws_of.update_cell(idx, col_idx_estado, "EN_CAMARA")
+                            break
+
+                st.cache_data.clear()
+                st.success(f"✅ ¡Producción registrada con éxito para la OC {oc_planta_sel}! Unidad enviada a cámara.")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar la producción: {e}")
+
+    with tab_cons:
+        st.markdown("<h3 style='color: #007bff;'>HISTORIAL DE PRODUCCIÓN REGISTRADA</h3>", unsafe_allow_html=True)
+        df_prod_hist, _ = get_df_safe("Produccion_Planta")
+        if not df_prod_hist.empty:
+            df_prod_finca = df_prod_hist if finca_actual.upper() == "TODAS" else df_prod_hist[df_prod_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
+            st.dataframe(df_prod_finca, use_container_width=True)
+        else:
+            st.info("No hay registros de producción previos guardados en el sistema.")
