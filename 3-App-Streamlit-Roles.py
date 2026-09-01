@@ -315,7 +315,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         st.markdown(
             """
             <style>
-                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stToggle {
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stToggle, div.stDateInput {
                     font-family: Arial, sans-serif !important;
                 }
             </style>
@@ -440,12 +440,24 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.markdown("**Caja 2 (Sencillo)**")
                 st.info("🔒 Modo Sencillo activo. Active el interruptor superior si requiere configuración Full.")
 
-        st.markdown("### 📄 Documentación y Destino")
+        st.markdown("### 📄 Documentación, Destino y Citas")
         r1, r2, r3, r4 = st.columns(4)
         with r1: lote_val = st.text_input("Lote", placeholder="Ej: 17-1355", key="lote_hibrido")
         with r2: rem_val = st.text_input("Folio Remisión", placeholder="Ej: REM-00123", key="rem_hibrido")
         with r3: fac_val = st.text_input("Folio Factura", placeholder="Ej: FAC-00123", key="fac_hibrido")
         with r4: fac2_val = st.text_input("Factura 2 (Full)", placeholder="Ej: FAC-00124", key="fac2_hibrido")
+
+        # --------------------------------------------------------------------------
+        # Sección de Citas, Fechas de Llegada y Registro / Comprobante
+        # --------------------------------------------------------------------------
+        st.markdown("##### 🕒 Control de Cita y Comprobante de Registro")
+        cc1, cc2, cc3 = st.columns([1, 2, 2])
+        with cc1:
+            tiene_cita = st.toggle("¿Tiene Cita?", value=False, key="toggle_tiene_cita")
+        with cc2:
+            fecha_cita_val = st.date_input("Fecha límite para la cita", value=datetime.now().date(), key="fecha_cita_hibrido", disabled=not tiene_cita)
+        with cc3:
+            comprobante_val = st.text_input("Comprobante / No. Serie / Registro", placeholder="Ej: REG-98765 (Opcional)", key="comprobante_hibrido")
 
         col_cli1, col_cli2 = st.columns(2)
         with col_cli1:
@@ -477,7 +489,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cajas_guia = st.number_input("Cantidad de Cajas en la Guía", min_value=1, value=1000, step=10, key="g_cajas_guia")
                 st.caption("Margen operativo estimado: +/- 50 cajas sobre el total del recorrido.")
             with cg2:
-                # Filtrado exclusivo por empresa activa principal para la finca emisora de la guía
                 df_fincas_empresa = df_fin[df_fin['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if not df_fin.empty and 'id_empresa' in df_fin.columns else df_fin
                 fincas_empresa_nombres, fincas_empresa_mapa = lista_simple_no_concat(df_fincas_empresa, "id_finca", "nombre")
                 
@@ -528,7 +539,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             for doc_t in tipos_docs_req:
                                 folios_doc_tipo = folios_lote_disp[folios_lote_disp['tipo_documento'].astype(str) == doc_t]
                                 if not folios_doc_tipo.empty:
-                                    # Formato limpio mostrando el número de folio disponible de forma clara
                                     opciones_doc = folios_doc_tipo.apply(
                                         lambda r: f"{r['folio']} | Disponible", 
                                         axis=1
@@ -570,7 +580,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         "estado", "observaciones", "ruta_fincas_ids",
                         "lleva_guia", "id_guia_asignada", "finca_guia_id", "cajas_guia",
                         "folio_certificado_origen", "folio_constancia_origen", 
-                        "folio_constancia_clorinacion", "folio_carta_responsiva"
+                        "folio_constancia_clorinacion", "folio_carta_responsiva",
+                        "tiene_cita", "fecha_cita", "comprobante_cita"
                     ])
                     
                     row = {
@@ -586,7 +597,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         "folio_certificado_origen": folios_asignados_detalle.get("Certificado de Origen", "") if lleva_guia else "",
                         "folio_constancia_origen": folios_asignados_detalle.get("Constancia de Origen", "") if lleva_guia else "",
                         "folio_constancia_clorinacion": folios_asignados_detalle.get("Constancia de Clorinacion", "") if lleva_guia else "",
-                        "folio_carta_responsiva": folios_asignados_detalle.get("Carta Responsiva", "") if lleva_guia else ""
+                        "folio_carta_responsiva": folios_asignados_detalle.get("Carta Responsiva", "") if lleva_guia else "",
+                        "tiene_cita": "SI" if tiene_cita else "NO",
+                        "fecha_cita": str(fecha_cita_val) if tiene_cita else "",
+                        "comprobante_cita": comprobante_val.strip()
                     }
                     
                     if append_row_dict_safe(ws_ord, row):
@@ -602,12 +616,14 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             try:
                                 ws_f_stock = sh.worksheet("Guias_Folios_Stock")
                                 data_f_stock = ws_f_stock.get_all_records()
+                                col_estado = ws_f_stock.find("estado").col
+                                col_orden = ws_f_stock.find("id_orden_asignada").col
                                 for i, f_row in enumerate(data_f_stock, start=2):
                                     f_val = str(f_row.get("folio", ""))
                                     f_compra = str(f_row.get("id_compra", ""))
                                     if f_compra == id_guia_asignada_sel and f_val in folios_asignados_detalle.values():
-                                        ws_f_stock.update_cell(i, ws_f_stock.find("estado").col, "ASIGNADO")
-                                        ws_f_stock.update_cell(i, ws_f_stock.find("id_orden_asignada").col, id_orden)
+                                        ws_f_stock.update_cell(i, col_estado, "ASIGNADO")
+                                        ws_f_stock.update_cell(i, col_orden, id_orden)
                             except Exception as ex_stock:
                                 st.warning(f"Orden creada, pero hubo un detalle al actualizar el stock de folios: {ex_stock}")
 
@@ -615,7 +631,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.success(f"✅ ¡Orden **{id_orden}** creada y expedida exitosamente bajo la empresa **{emp_nombre_principal}**!")
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
-
   # --------------------------------------------------------------------------
     # 6.2 Submódulo: 📦 Órdenes Expedidas
     # --------------------------------------------------------------------------
