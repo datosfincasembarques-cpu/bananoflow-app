@@ -1754,24 +1754,20 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Carga robusta de Clientes mostrando Código + Nombre completo de manera garantizada
+    # Carga robusta de Clientes extrayendo estrictamente el valor de la Columna B (Razón Social / Nombre)
     df_cli_db, _ = get_df_safe("Clientes")
     clientes_opciones = []
     if not df_cli_db.empty:
-        cols_lower = [str(c).lower() for c in df_cli_db.columns]
-        col_id_cli = next((df_cli_db.columns[i] for i, c in enumerate(cols_lower) if 'id' in c or 'codigo' in c or 'clik' in c), df_cli_db.columns[0])
-        col_nom_cli = next((df_cli_db.columns[i] for i, c in enumerate(cols_lower) if 'nombre' in c or 'razon' in c or 'cliente' in c or 'desc' in c), df_cli_db.columns[-1] if len(df_cli_db.columns) > 1 else df_cli_db.columns[0])
+        # Columna B es el índice 1 (si existe), de lo contrario tomamos la segunda columna disponible o la primera
+        col_nombre_b = df_cli_db.columns[1] if len(df_cli_db.columns) > 1 else df_cli_db.columns[0]
         
         for _, row in df_cli_db.iterrows():
-            c_id = str(row[col_id_cli]).strip()
-            c_nom = str(row[col_nom_cli]).strip()
-            if c_id and c_nom and c_id != 'nan' and c_nom != 'nan':
-                if c_id.lower() not in c_nom.lower():
-                    clientes_opciones.append(f"{c_id} - {c_nom}")
-                else:
-                    clientes_opciones.append(c_nom)
+            c_nom = str(row[col_nombre_b]).strip()
+            if c_nom and c_nom != 'nan':
+                clientes_opciones.append(c_nom)
+                
     if not clientes_opciones:
-        clientes_opciones = ["C001 - Cliente General", "C002 - Cliente Local"]
+        clientes_opciones = ["WALTMAR, QUERETARO", "CLIENTE GENERAL"]
 
     df_cal_db, _ = get_df_safe("Calidades")
     if df_cal_db.empty:
@@ -1813,7 +1809,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 "cantidad": st.column_config.NumberColumn("Cantidad (Unidades)", min_value=0.0, step=1.0, format="%.0f"),
                 "calidad": st.column_config.SelectboxColumn("Calidad", options=calidades_opciones, required=True),
                 "carton": st.column_config.SelectboxColumn("Tipo de Cartón", options=cartones_opciones, required=True),
-                "cliente": st.column_config.SelectboxColumn("Cliente (Código - Nombre)", options=clientes_opciones, required=True),
+                "cliente": st.column_config.SelectboxColumn("Cliente (Razón Social)", options=clientes_opciones, required=True),
                 "peso_unitario": st.column_config.NumberColumn("Peso (kg)", min_value=0.0, step=0.01, format="%.2f")
             },
             key="editor_produccion_tabular"
@@ -1900,7 +1896,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
         col_dt_1, col_dt_2 = st.columns(2)
         with col_dt_1:
             st.markdown("#### 👤 Datos del Cliente y Operador")
-            cliente_tercera_local = st.selectbox("Seleccione el Cliente", options=clientes_opciones, key="terc_loc_cliente")
+            cliente_tercera_local = st.selectbox("Seleccione el Cliente (Razón Social)", options=clientes_opciones, key="terc_loc_cliente")
             
             st.info(f"🏷️ **Cliente Destino Seleccionado:**\n\n**{cliente_tercera_local}**")
 
@@ -1998,7 +1994,6 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                         st.markdown(f"**Editando Registro:** `{id_prod_sel}`")
                         nueva_cant = st.number_input("Cantidad (Unidades)", value=float(fila_act.get('cantidad', 0)), step=1.0)
                         
-                        # Calidad actual index
                         cal_val = str(fila_act.get('calidad', calidades_opciones[0]))
                         idx_cal = calidades_opciones.index(cal_val) if cal_val in calidades_opciones else 0
                         nueva_cal = st.selectbox("Calidad", options=calidades_opciones, index=idx_cal)
@@ -2009,7 +2004,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                         
                         cli_val = str(fila_act.get('cliente', clientes_opciones[0]))
                         idx_cli = clientes_opciones.index(cli_val) if cli_val in clientes_opciones else 0
-                        nuevo_cli = st.selectbox("Cliente", options=clientes_opciones, index=idx_cli)
+                        nuevo_cli = st.selectbox("Cliente (Razón Social)", options=clientes_opciones, index=idx_cli)
                         
                         nuevo_peso_u = st.number_input("Peso Unitario (kg)", value=float(fila_act.get('peso_unitario', 18.86)), step=0.01)
 
@@ -2026,7 +2021,6 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                                 cell_p = ws_p_ed.find(str(id_prod_sel))
                                 if cell_p:
                                     r_idx = cell_p.row
-                                    # Actualizar columnas según cabecera
                                     headers_list = ws_p_ed.row_values(1)
                                     nuevo_peso_tot = nueva_cant * nuevo_peso_u
                                     
