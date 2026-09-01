@@ -1143,140 +1143,101 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.info("ℹ️ No hay equipos de transporte registrados actualmente.")
                 
 # --------------------------------------------------------------------------
-    # 6.6 Submódulo: 📜 Compra y Guías Fitosanitarias (Rangos Individuales)
+    # 6.6 Submódulo: 📈 Reportes y Concentrados Corporativos
     # --------------------------------------------------------------------------
-    elif menu_sel == "📜 Compra y Guías":
-        st.subheader("📜 Control de Compra e Inventario de Guías Fitosanitarias")
-        
-        tab_compra, tab_inventario = st.tabs(["🛒 Registrar Compra y Rangos", "📊 Inventario y Control de Folios"])
-        
-        with tab_compra:
-            st.markdown("##### 📝 Registro de Adquisición y Rangos de los 4 Documentos")
-            
-            df_guias, _ = get_df_safe("Compra_Guias")
-            
-            col_g1, col_g2 = st.columns(2)
-            with col_g1:
-                guia_emp_sel = st.selectbox("Empresa Adquiriente", emp_nombres if emp_nombres else ["EMP-01"], key="g_emp_compra")
-                guia_data_emp = emp_mapa.get(guia_emp_sel, {})
-                id_emp_guia = str(guia_data_emp.get('id_empresa', '') or guia_emp_sel)
-                
-                cantidad_juegos = st.number_input("Cantidad de Juegos de Guías", min_value=1, value=20, step=1, key="g_cantidad_juegos")
-                precio_unitario = st.number_input("Precio Unitario por Juego ($)", min_value=0.0, value=250.0, step=10.0, key="g_precio_unitario")
-                
-            with col_g2:
-                fecha_compra = st.date_input("Fecha de Adquisición", value=datetime.now(), key="g_fecha_compra")
-                folio_compra_aaps = st.text_input("Folio / Comprobante (AAPS)", placeholder="Ej: AAPS-00123", key="g_folio_aaps")
-                estado_guia = st.selectbox("Estado del Lote", ["ACTIVO", "AGOTADO", "DEVUELTO"], key="g_estado_lote")
+    elif menu_sel == "Reportes y Concentrados":
+        st.markdown(
+            """
+            <style>
+                html, body, [class*="css"] {
+                    font-family: Arial, sans-serif !important;
+                }
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stDateInput, div.stButton, div.stRadio, div.dataframe {
+                    font-family: Arial, sans-serif !important;
+                }
+                table, th, td {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
 
-            st.markdown("##### 🔢 Rangos de Folios Inicial y Final por Documento")
-            st.info("Ingrese los folios inicial y final específicos para cada uno de los 4 documentos adquiridos.")
+        st.subheader("📈 Módulo de Reportes y Concentrados Corporativos")
+        st.caption("Filtre, analice y exporte información consolidada de operaciones, volúmenes de cajas y estatus.")
 
-            rc1, rc2 = st.columns(2)
-            with rc1:
-                st.markdown("**Certificado de Origen**")
-                cer_ini = st.text_input("Folio Inicial (Certificado)", placeholder="Ej: CO-001", key="cer_ini")
-                cer_fin = st.text_input("Folio Final (Certificado)", placeholder="Ej: CO-020", key="cer_fin")
-                
-                st.markdown("**Constancia de Origen**")
-                con_ini = st.text_input("Folio Inicial (Constancia)", placeholder="Ej: CN-001", key="con_ini")
-                con_fin = st.text_input("Folio Final (Constancia)", placeholder="Ej: CN-020", key="con_fin")
-                
-            with rc2:
-                st.markdown("**Constancia de Clorinación**")
-                clo_ini = st.text_input("Folio Inicial (Clorinación)", placeholder="Ej: CL-001", key="clo_ini")
-                clo_fin = st.text_input("Folio Final (Clorinación)", placeholder="Ej: CL-020", key="clo_fin")
-                
-                st.markdown("**Carta Responsiva**")
-                car_ini = st.text_input("Folio Inicial (Carta)", placeholder="Ej: CR-001", key="car_ini")
-                car_fin = st.text_input("Folio Final (Carta)", placeholder="Ej: CR-020", key="car_fin")
+        df_ordenes, _ = get_df_safe("OrdenesCarga")
 
-            importe_total = cantidad_juegos * precio_unitario
-            st.markdown(f"<div style='background-color: #e8f4fd; padding: 10px; border-radius: 6px; margin-bottom: 15px;'><b>💰 Importe Total Calculado:</b> ${importe_total:,.2f} ({cantidad_juegos} juegos x ${precio_unitario:,.2f})</div>", unsafe_allow_html=True)
+        if df_ordenes.empty:
+            st.info("ℹ️ No hay registros de órdenes de carga disponibles en la base de datos.")
+        else:
+            st.markdown("---")
+            st.markdown("#### ⚙️ Filtros Avanzados de Búsqueda")
 
-            if st.button("💾 Registrar Compra y Generar Folios", type="primary", use_container_width=True):
-                try:
-                    _, sh, _ = get_db()
-                    ws_g = sh.worksheet("Compra_Guias")
-                    ws_f = sh.worksheet("Guias_Folios_Stock")
-                    
-                    id_compra = f"CG-{datetime.now().strftime('%Y%m%d%H%M')}"
-                    
-                    ensure_columns_exist(ws_g, [
-                        "id_compra", "id_empresa", "fecha_compra", "cantidad_juegos", 
-                        "precio_unitario", "importe_total", "folio_compra_AAPS", "estado"
-                    ])
-                    
-                    ensure_columns_exist(ws_f, [
-                        "id_folio", "id_compra", "tipo_documento", "folio", "estado", 
-                        "id_orden_asignada", "id_guia_asignacion"
-                    ])
-                    
-                    row_guia = {
-                        "id_compra": id_compra,
-                        "id_empresa": id_emp_guia,
-                        "fecha_compra": fecha_compra.isoformat(),
-                        "cantidad_juegos": cantidad_juegos,
-                        "precio_unitario": precio_unitario,
-                        "importe_total": importe_total,
-                        "folio_compra_AAPS": folio_compra_aaps,
-                        "estado": estado_guia
-                    }
-                    
-                    if append_row_dict_safe(ws_g, row_guia):
-                        # Lista de documentos con sus respectivos rangos ingresados
-                        docs_a_generar = [
-                            ("Certificado de Origen", cer_ini, cer_fin),
-                            ("Constancia de Origen", con_ini, con_fin),
-                            ("Constancia de Clorinacion", clo_ini, clo_fin),
-                            ("Carta Responsiva", car_ini, car_fin)
-                        ]
-                        
-                        # Generar cada folio individual en el stock según el rango alfanumérico/numérico
-                        for doc_tipo, ini_val, fin_val in docs_a_generar:
-                            if ini_val and fin_val:
-                                # Si son numéricos puros, podemos iterar; si contienen prefijos, se registran como texto o secuencia
-                                try:
-                                    num_ini_int = int(''.filter(str.isdigit, ini_val) or 1)
-                                    num_fin_int = int(''.filter(str.isdigit, fin_val) or 1)
-                                    prefijo = "".join([c for c in ini_val if not c.isdigit()])
-                                    
-                                    for n in range(num_ini_int, num_fin_int + 1):
-                                        folio_str = f"{prefijo}{n}" if prefijo else str(n)
-                                        row_folio = {
-                                            "id_folio": f"{id_compra}-{doc_tipo[:3].upper()}-{n}",
-                                            "id_compra": id_compra,
-                                            "tipo_documento": doc_tipo,
-                                            "folio": folio_str,
-                                            "estado": "DISPONIBLE",
-                                            "id_orden_asignada": "",
-                                            "id_guia_asignacion": ""
-                                        }
-                                        append_row_dict_safe(ws_f, row_folio)
-                                except:
-                                    # Fallopure text si no se puede parsear numéricamente
-                                    pass
-                                
-                        st.success(f"✅ ¡Compra registrada y folios de los 4 documentos almacenados con ID **{id_compra}**!")
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Error al registrar la compra y folios: {e}")
+            f_col1, f_col2, f_col3 = st.columns(3)
 
-        with tab_inventario:
-            st.markdown("##### 📊 Detalle de Folios por Documento en Stock")
-            df_folios, _ = get_df_safe("Guias_Folios_Stock")
-            
-            if df_folios.empty:
-                st.info("No hay folios de guías registrados en el sistema.")
+            with f_col1:
+                clientes_lista = ["TODOS"] + sorted(df_ordenes['cliente'].dropna().astype(str).unique().tolist()) if 'cliente' in df_ordenes.columns else ["TODOS"]
+                filtro_rep_cliente = st.selectbox("Cliente", clientes_lista, key="rep_filtro_cliente")
+
+            with f_col2:
+                estados_lista = ["TODOS"] + sorted(df_ordenes['estado'].dropna().astype(str).unique().tolist()) if 'estado' in df_ordenes.columns else ["TODOS", "EXPEDIDA", "ACTIVA"]
+                filtro_rep_estado = st.selectbox("Estado de Orden", estados_lista, key="rep_filtro_estado")
+
+            with f_col3:
+                operadores_lista = ["TODOS"] + sorted(df_ordenes['id_operador'].dropna().astype(str).unique().tolist()) if 'id_operador' in df_ordenes.columns else ["TODOS"]
+                filtro_rep_operador = st.selectbox("Operador", operadores_lista, key="rep_filtro_operador")
+
+            df_reporte = df_ordenes.copy()
+            if filtro_rep_cliente != "TODOS" and 'cliente' in df_reporte.columns:
+                df_reporte = df_reporte[df_reporte['cliente'].astype(str).str.upper() == filtro_rep_cliente.upper()]
+            if filtro_rep_estado != "TODOS" and 'estado' in df_reporte.columns:
+                df_reporte = df_reporte[df_reporte['estado'].astype(str).str.upper() == filtro_rep_estado.upper()]
+            if filtro_rep_operador != "TODOS" and 'id_operador' in df_reporte.columns:
+                df_reporte = df_reporte[df_reporte['id_operador'].astype(str).str.upper() == filtro_rep_operador.upper()]
+
+            st.markdown("---")
+            st.markdown("#### 📊 Indicadores Clave del Reporte (KPIs)")
+
+            total_ordenes = len(df_reporte)
+            con_factura = 0
+            if 'folio_factura' in df_reporte.columns:
+                con_factura = df_reporte['folio_factura'].astype(str).str.strip().ne("").sum()
+
+            kpi1, kpi2, kpi3 = st.columns(3)
+            with kpi1:
+                st.metric(label="📦 Órdenes en Reporte", value=total_ordenes)
+            with kpi2:
+                st.metric(label="📋 Órdenes Documentadas (Factura)", value=f"{con_factura} / {total_ordenes}")
+            with kpi3:
+                st.metric(label="🏢 Filtro Cliente", value=filtro_rep_cliente)
+
+            st.markdown("---")
+            st.markdown("#### 📋 Vista Previa del Concentrado")
+
+            if df_reporte.empty:
+                st.warning("⚠️ No se encontraron registros que coincidan con los filtros seleccionados.")
             else:
-                st.dataframe(df_folios, use_container_width=True)
-                st.caption("Control individual de folios para Certificado de Origen, Constancia de Origen, Constancia de Clorinación y Carta Responsiva.")
+                st.dataframe(df_reporte, use_container_width=True)
 
-# --------------------------------------------------------------------------
+                import io
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df_reporte.to_excel(writer, index=False, sheet_name='Concentrado_Corporativo')
+                excel_data = output.getvalue()
+
+                st.download_button(
+                    label="📥 Descargar Reporte Concentrado Completo a Excel (.xlsx)",
+                    data=excel_data,
+                    file_name=f"Concentrado_Corporativo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+    # --------------------------------------------------------------------------
     # 6.7 Submódulo: 📜 Compra y Guías Fitosanitarias (Rangos Individuales)
     # --------------------------------------------------------------------------
     elif menu_sel == "📜 Compra y Guías":
-        # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
         st.markdown(
             """
             <style>
