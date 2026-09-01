@@ -774,10 +774,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
                         
 # --------------------------------------------------------------------------
-    # 6.4 Submódulo: 📄 Remisión/Factura
+    # 6.4 Submódulo: 📄 Remisión/Factura (Con lectura dinámica desde la tabla Clientes)
     # --------------------------------------------------------------------------
     if "Remisión/Factura" in menu_sel:
-        # Inyección de estilo global estricto para forzar la tipografía Arial en toda la interfaz y contenedores
         st.markdown(
             """
             <style>
@@ -796,26 +795,25 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         )
 
         st.subheader("📄 Gestión y Asignación de Lotes, Remisiones y Facturas")
-        st.caption("Seleccione una orden pendiente de documentación para asignar o actualizar su número de lote, remisión y factura.")
+        st.caption("Seleccione una orden pendiente de documentación para asignar o actualizar su número de lote, remisión (con prefijo del cliente) y factura.")
 
         df_ordenes, _ = get_df_safe("OrdenesCarga")
+        df_clientes, _ = get_df_safe("Clientes")
 
         if df_ordenes.empty:
             st.info("ℹ️ No hay órdenes de carga registradas en el sistema.")
         else:
-            # Filtrar opcionalmente por empresa actual si la columna existe
             if 'id_empresa' in df_ordenes.columns and 'id_emp_principal' in locals():
                 df_ordenes = df_ordenes[df_ordenes['id_empresa'].astype(str).str.upper() == str(id_emp_principal).upper()]
 
             if df_ordenes.empty:
-                st.warning(f"⚠️ No hay órdenes registradas para la empresa actual: **{emp_nombre_principal if 'emp_nombre_principal' in locals() else ''}**.")
+                st.warning(f"⚠️ No hay órdenes registradas para la empresa actual.")
             else:
-                # Asegurar columnas necesarias en el DataFrame para evitar errores
-                for col_necesaria in ['id_lote', 'folio_remision', 'folio_factura']:
+                for col_necesaria in ['id_lote', 'folio_remision', 'folio_factura', 'cliente']:
                     if col_necesaria not in df_ordenes.columns:
                         df_ordenes[col_necesaria] = ""
 
-                # Filtrar órdenes pendientes (donde falte al menos un dato clave)
+                # Filtrar órdenes pendientes
                 mask_pendientes = (
                     (df_ordenes['id_lote'].astype(str).str.strip().isin(["", "nan", "None"])) |
                     (df_ordenes['folio_remision'].astype(str).str.strip().isin(["", "nan", "None"])) |
@@ -823,7 +821,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 )
                 df_pendientes = df_ordenes[mask_pendientes]
 
-                # Selector de modo de visualización
                 modo_vista = st.radio(
                     "Filtrar Órdenes para Captura",
                     ["⚠️ Órdenes Pendientes de Documentación", "📋 Todas las Órdenes Registradas"],
@@ -845,7 +842,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     else:
                         orden_sel_act = st.selectbox("Seleccione la Orden de Carga", ids_ordenes, key="sel_orden_facturacion")
 
-                        # Obtener los datos actuales de la orden seleccionada
                         fila_orden = df_trabajo[df_trabajo['id_orden'].astype(str) == str(orden_sel_act)]
                         
                         if not fila_orden.empty:
@@ -855,14 +851,35 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             val_rem_act = str(datos_ord.get('folio_remision', '') if str(datos_ord.get('folio_remision', '')) not in ["nan", "None"] else "")
                             val_fac_act = str(datos_ord.get('folio_factura', '') if str(datos_ord.get('folio_factura', '')) not in ["nan", "None"] else "")
                             val_fac2_act = str(datos_ord.get('folio_factura2', '') if str(datos_ord.get('folio_factura2', '')) not in ["nan", "None"] else "")
+                            cliente_orden = str(datos_ord.get('cliente', '')).strip().upper()
+
+                            # Buscar el prefijo/letra de remisión directamente desde la tabla Clientes
+                            prefijo_cliente = ""
+                            if not df_clientes.empty and 'razon_social' in df_clientes.columns and 'letra_remision' in df_clientes.columns:
+                                match_cli = df_clientes[df_clientes['razon_social'].astype(str).str.strip().str.upper() == cliente_orden]
+                                if not match_cli.empty:
+                                    prefijo_cliente = str(match_cli.iloc[0].get('letra_remision', '')).strip()
+                                    if prefijo_cliente in ["nan", "None"]:
+                                        prefijo_cliente = ""
+
+                            # Si no tiene remisión registrada, calcular consecutivo usando la letra asignada en la tabla Clientes
+                            if not val_rem_act and prefijo_cliente:
+                                remisiones_existentes = df_ordenes['folio_remision'].astype(str).tolist()
+                                count_prefijo = sum(1 for r in remisiones_existentes if r.startswith(prefijo_cliente))
+                                siguiente_consecutivo = count_prefijo + 1
+                                val_rem_act = f"{prefijo_cliente}-{siguiente_consecutivo:04d}"
 
                             with st.form(f"form_act_doc_{orden_sel_act}"):
-                                st.markdown(f"**Editando documentos para la orden:** `{orden_sel_act}`")
+                                st.markdown(f"**Editando documentos para la orden:** `{orden_sel_act}` | **Cliente:** `{cliente_orden if cliente_orden else 'GENERAL'}`")
+                                if prefijo_cliente:
+                                    st.info(f"ℹ️ Letra de remisión asignada desde el catálogo de clientes: **{prefijo_cliente}**")
+                                else:
+                                    st.warning("⚠️ Este cliente no tiene configurada una letra de remisión en el catálogo de Clientes.")
                                 
                                 f_r1, f_r2 = st.columns(2)
                                 with f_r1:
                                     nuevo_lote = st.text_input("Número de Lote (Guía AAPS)", value=val_lote_act, placeholder="Ej: CG-20260830-0001")
-                                    nuevo_rem = st.text_input("Número de Remisión", value=val_rem_act, placeholder="Ej: REM-00123")
+                                    nuevo_rem = st.text_input("Número de Remisión (Letra y Consecutivo)", value=val_rem_act, placeholder="Ej: Z102-0001 o Y123-0001")
                                 with f_r2:
                                     nueva_fac = st.text_input("Número de Factura", value=val_fac_act, placeholder="Ej: FAC-00123")
                                     nueva_fac2 = st.text_input("Factura 2 (Opcional)", value=val_fac2_act, placeholder="Ej: FAC-00124")
@@ -898,12 +915,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                     except Exception as e:
                                         st.error(f"Error al actualizar la documentación: {e}")
 
-                # Tabla resumen inferior para control visual rápido
                 st.markdown("---")
                 st.markdown("#### 📋 Resumen del Estado de Documentación en Órdenes")
-                cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
-                st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)
-                
+                cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "cliente", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
+                st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)                
                 
 # --------------------------------------------------------------------------
     # 6.5 Submódulo: 🛡️ Módulo de Vigilancia (Entrada y Salida en Caseta)
