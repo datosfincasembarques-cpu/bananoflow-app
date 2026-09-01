@@ -1743,33 +1743,35 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     st.markdown("""
         <div class="verde-banner">
             <h2>🏭 Módulo de Planta & Control de Inventario</h2>
-            <p>Registro tabular dinámico de producción, existencias y despachos locales de fruta de tercera</p>
+            <p>Registro tabular dinámico de producción, existencias, edición y despachos locales de fruta de tercera</p>
         </div>
     """, unsafe_allow_html=True)
 
     tab_prod, tab_tercera, tab_cons = st.tabs([
         "📋 CAPTURA TABULAR & SALDOS", 
         "🚚 GESTIÓN Y DESPACHO LOCAL (FRUTA DE TERCERA)", 
-        "📊 HISTORIAL GENERAL EN PLANTA"
+        "📊 HISTORIAL, EDICIÓN Y ELIMINACIÓN (PLANTA)"
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Carga robusta de Clientes mostrando Código + Nombre completo
+    # Carga robusta de Clientes mostrando Código + Nombre completo de manera garantizada
     df_cli_db, _ = get_df_safe("Clientes")
+    clientes_opciones = []
     if not df_cli_db.empty:
-        col_id_cli = next((c for c in df_cli_db.columns if 'id' in c.lower() or 'codigo' in c.lower() or 'clik' in c.lower()), df_cli_db.columns[0])
-        col_nom_cli = next((c for c in df_cli_db.columns if 'nombre' in c.lower() or 'cliente' in c.lower() or 'razon' in c.lower() or 'desc' in c.lower()), df_cli_db.columns[-1])
+        cols_lower = [str(c).lower() for c in df_cli_db.columns]
+        col_id_cli = next((df_cli_db.columns[i] for i, c in enumerate(cols_lower) if 'id' in c or 'codigo' in c or 'clik' in c), df_cli_db.columns[0])
+        col_nom_cli = next((df_cli_db.columns[i] for i, c in enumerate(cols_lower) if 'nombre' in c or 'razon' in c or 'cliente' in c or 'desc' in c), df_cli_db.columns[-1] if len(df_cli_db.columns) > 1 else df_cli_db.columns[0])
         
-        clientes_opciones = []
         for _, row in df_cli_db.iterrows():
-            c_id = str(row[col_id_cli])
-            c_nom = str(row[col_nom_cli])
-            if c_id != c_nom:
-                clientes_opciones.append(f"{c_id} - {c_nom}")
-            else:
-                clientes_opciones.append(c_nom)
-    else:
-        clientes_opciones = ["C001 - General / Inventario", "C002 - Cliente Local"]
+            c_id = str(row[col_id_cli]).strip()
+            c_nom = str(row[col_nom_cli]).strip()
+            if c_id and c_nom and c_id != 'nan' and c_nom != 'nan':
+                if c_id.lower() not in c_nom.lower():
+                    clientes_opciones.append(f"{c_id} - {c_nom}")
+                else:
+                    clientes_opciones.append(c_nom)
+    if not clientes_opciones:
+        clientes_opciones = ["C001 - Cliente General", "C002 - Cliente Local"]
 
     df_cal_db, _ = get_df_safe("Calidades")
     if df_cal_db.empty:
@@ -1900,7 +1902,6 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             st.markdown("#### 👤 Datos del Cliente y Operador")
             cliente_tercera_local = st.selectbox("Seleccione el Cliente", options=clientes_opciones, key="terc_loc_cliente")
             
-            # Etiqueta visual adicional para mostrar claramente el cliente seleccionado en grande
             st.info(f"🏷️ **Cliente Destino Seleccionado:**\n\n**{cliente_tercera_local}**")
 
             nombre_operador = st.text_input("Nombre del Operador", key="terc_loc_operador")
@@ -1975,13 +1976,100 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                     st.error(f"Error al registrar despacho local: {e}")
 
     with tab_cons:
-        st.markdown("<h3 style='color: #28a745;'>📊 HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
-        
-        st.markdown("#### 📦 Producción (Inventario Tabular)")
+        st.markdown("<h3 style='color: #28a745;'>📊 HISTORIAL, EDICIÓN Y ELIMINACIÓN (PLANTA)</h3>", unsafe_allow_html=True)
+        st.caption("💡 Aquí puede consultar los registros guardados, así como **editar** o **eliminar** registros de producción por si cometió algún error.")
+
+        st.markdown("#### 📦 Producción Registrada (Inventario)")
         df_prod_hist, _ = get_df_safe("Produccion_Planta")
         if not df_prod_hist.empty:
             df_prod_finca = df_prod_hist if finca_actual.upper() == "TODAS" else df_prod_hist[df_prod_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
-            st.dataframe(df_prod_finca, use_container_width=True)
+            
+            if not df_prod_finca.empty:
+                st.dataframe(df_prod_finca, use_container_width=True)
+                
+                st.markdown("---")
+                st.markdown("### ✏️ Modificar o Eliminar Registro de Producción")
+                id_prod_sel = st.selectbox("Seleccione el ID de Producción a Modificar o Eliminar", options=df_prod_finca['id_produccion'].astype(str).tolist(), key="select_id_prod_edit")
+                
+                if id_prod_sel:
+                    fila_act = df_prod_finca[df_prod_finca['id_produccion'].astype(str) == str(id_prod_sel)].iloc[0]
+                    
+                    with st.form(key="form_editar_produccion"):
+                        st.markdown(f"**Editando Registro:** `{id_prod_sel}`")
+                        nueva_cant = st.number_input("Cantidad (Unidades)", value=float(fila_act.get('cantidad', 0)), step=1.0)
+                        
+                        # Calidad actual index
+                        cal_val = str(fila_act.get('calidad', calidades_opciones[0]))
+                        idx_cal = calidades_opciones.index(cal_val) if cal_val in calidades_opciones else 0
+                        nueva_cal = st.selectbox("Calidad", options=calidades_opciones, index=idx_cal)
+                        
+                        cart_val = str(fila_act.get('carton', cartones_opciones[0]))
+                        idx_cart = cartones_opciones.index(cart_val) if cart_val in cartones_opciones else 0
+                        nuevo_cart = st.selectbox("Tipo de Cartón", options=cartones_opciones, index=idx_cart)
+                        
+                        cli_val = str(fila_act.get('cliente', clientes_opciones[0]))
+                        idx_cli = clientes_opciones.index(cli_val) if cli_val in clientes_opciones else 0
+                        nuevo_cli = st.selectbox("Cliente", options=clientes_opciones, index=idx_cli)
+                        
+                        nuevo_peso_u = st.number_input("Peso Unitario (kg)", value=float(fila_act.get('peso_unitario', 18.86)), step=0.01)
+
+                        col_btn_ed1, col_btn_ed2 = st.columns(2)
+                        with col_btn_ed1:
+                            btn_actualizar = st.form_submit_button("💾 Guardar Cambios", type="primary")
+                        with col_btn_ed2:
+                            btn_eliminar = st.form_submit_button("🗑️ Eliminar Registro", type="secondary")
+
+                        if btn_actualizar:
+                            try:
+                                _, sh_ed, _ = get_db()
+                                ws_p_ed = sh_ed.worksheet("Produccion_Planta")
+                                cell_p = ws_p_ed.find(str(id_prod_sel))
+                                if cell_p:
+                                    r_idx = cell_p.row
+                                    # Actualizar columnas según cabecera
+                                    headers_list = ws_p_ed.row_values(1)
+                                    nuevo_peso_tot = nueva_cant * nuevo_peso_u
+                                    
+                                    updates_map = {
+                                        "cantidad": str(nueva_cant),
+                                        "calidad": str(nueva_cal),
+                                        "carton": str(nuevo_cart),
+                                        "cliente": str(nuevo_cli),
+                                        "peso_unitario": str(nuevo_peso_u),
+                                        "peso_total_kg": str(nuevo_peso_tot)
+                                    }
+                                    
+                                    for col_nombre, val_nuevo in updates_map.items():
+                                        if col_nombre in headers_list:
+                                            c_idx = headers_list.index(col_nombre) + 1
+                                            ws_p_ed.update_cell(r_idx, c_idx, val_nuevo)
+                                            
+                                    st.cache_data.clear()
+                                    st.success(f"✅ Registro {id_prod_sel} actualizado correctamente.")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("No se encontró la fila en la hoja de Google Sheets.")
+                            except Exception as e:
+                                st.error(f"Error al actualizar: {e}")
+
+                        if btn_eliminar:
+                            try:
+                                _, sh_del, _ = get_db()
+                                ws_p_del = sh_del.worksheet("Produccion_Planta")
+                                cell_del = ws_p_del.find(str(id_prod_sel))
+                                if cell_del:
+                                    ws_p_del.delete_rows(cell_del.row)
+                                    st.cache_data.clear()
+                                    st.success(f"🗑️ Registro {id_prod_sel} eliminado con éxito.")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("No se encontró el registro para eliminar.")
+                            except Exception as e:
+                                st.error(f"Error al eliminar: {e}")
+            else:
+                st.info("No hay registros de producción para esta finca.")
         else:
             st.info("No hay registros de producción previos.")
 
