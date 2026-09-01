@@ -1521,9 +1521,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.metric(label="📌 Estatus", value=filtro_seg_estado)
                             
 # ==============================================================================
-# 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
+# 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS: VIGILANCIA Y ESTIBA)
 # ==============================================================================
-elif st.session_state.rol == "VIGILANCIA":
+if st.session_state.rol == "VIGILANCIA":
     st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     st.markdown("Vehículos en Finca / Tránsito")
     
@@ -1818,3 +1818,130 @@ elif st.session_state.rol == "VIGILANCIA":
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al registrar salida: {e}")
+
+elif st.session_state.rol == "ESTIBA":
+    st.markdown(f"<h2 style='color: #ff9800;'>❄️ Módulo de Cámara (Jefe de Cámara / Estiba) - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
+    st.markdown("Control de Preenfriado, Sellos y Termógrafos por Orden de Carga")
+
+    df_of, _ = get_df_safe("Orden_Fincas")
+    finca_actual = str(st.session_state.finca_asignada)
+
+    if df_of.empty:
+        st.warning("No hay órdenes asignadas o la red está inestable temporalmente.")
+        df_finca = pd.DataFrame()
+    else:
+        df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
+
+    df_camara = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['LLEGADO_CASETA', 'EN_SITIO', 'EN FINCA', 'EN_CAMARA', 'ESTIBA'])] if not df_finca.empty else df_finca
+    st.metric("Unidades Disponibles en Cámara / Finca", len(df_camara))
+    st.dataframe(df_camara, use_container_width=True)
+
+    st.markdown("---")
+
+    tab_pre, tab_term = st.tabs(["🌡️ REGISTRAR PREENFRIADO Y SELLOS", "📦 VALIDACIÓN DE CARGA Y ESTIBA"])
+    hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with tab_pre:
+        st.markdown("<h3 style='color: #ff9800;'>CONTROL DE PREENFRIADO Y CÁMARA</h3>", unsafe_allow_html=True)
+
+        lista_ocs_cam = df_camara['id_orden'].astype(str).tolist() if not df_camara.empty else ["Sin unidades en cámara"]
+        oc_cam_sel = st.selectbox("Seleccione la OC para Preenfriado:", lista_ocs_cam, key="est_oc_cam_sel")
+
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            temp_inicial = st.number_input("Temperatura Inicial (°C)", value=13.5, step=0.1, key="est_temp_ini")
+            sello_seguridad = st.text_input("Número de Sello de Seguridad", placeholder="Ej. SEL-99482", key="est_sello")
+        with col_p2:
+            termografo_id = st.text_input("ID / Código de Termógrafo", placeholder="Ej. TERM-0045", key="est_termografo")
+            finca_origen_real = st.text_input("Finca Origen (Cámara)", value=finca_actual, key="est_finca_origen")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        foto_termografo = st.camera_input("📷 FOTO - INSTALACIÓN DE TERMÓGRAFO", key="est_foto_termo")
+
+        if st.button("✅ GUARDAR PREENFRIADO Y SELLOS", type="primary", use_container_width=True, key="btn_guardar_preenfriado"):
+            try:
+                _, sh, _ = get_db()
+                nombres_hojas = [w.title for w in sh.worksheets()]
+                if "Bitacora_Camara" in nombres_hojas:
+                    ws_c = sh.worksheet("Bitacora_Camara")
+                else:
+                    ws_c = sh.add_worksheet(title="Bitacora_Camara", rows=1000, cols=20)
+
+                if not ws_c.get_all_values():
+                    ws_c.append_row([
+                        "id_bitacora_camara", "id_orden", "id_finca", "finca_origen", 
+                        "temperatura_inicial", "sello_seguridad", "termografo_id", 
+                        "fecha_hora", "id_usuario", "estado_proceso", "foto_termografo"
+                    ])
+
+                id_reg_c = f"CAM-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                dict_reg_c = {
+                    "id_bitacora_camara": id_reg_c,
+                    "id_orden": str(oc_cam_sel),
+                    "id_finca": str(finca_actual),
+                    "finca_origen": str(finca_origen_real),
+                    "temperatura_inicial": str(temp_inicial),
+                    "sello_seguridad": str(sello_seguridad),
+                    "termografo_id": str(termografo_id),
+                    "fecha_hora": str(hora_dispositivo),
+                    "id_usuario": str(st.session_state.get("username", "jefe_camara")),
+                    "estado_proceso": "PREENFRIADO_REGISTRADO",
+                    "foto_termografo": "CARGADA" if foto_termografo is not None else "PENDIENTE"
+                }
+
+                ensure_columns_exist(ws_c, list(dict_reg_c.keys()))
+                append_row_dict_safe(ws_c, dict_reg_c)
+
+                ws_of = sh.worksheet("Orden_Fincas")
+                all_of_records = ws_of.get_all_records()
+                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
+
+                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
+                    col_idx_estado = headers_of.index("estado_carga") + 1
+                    for idx, row in enumerate(all_of_records, start=2):
+                        if str(row.get("id_orden", "")).strip() == str(oc_cam_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
+                            ws_of.update_cell(idx, col_idx_estado, "EN_CAMARA")
+                            break
+
+                st.cache_data.clear()
+                st.success(f"✅ ¡Preenfriado y sellos registrados con éxito para la OC {oc_cam_sel}!")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar datos de cámara: {e}")
+
+    with tab_term:
+        st.markdown("<h3 style='color: #ff9800;'>CIERRE DE ESTIBA Y LIBERACIÓN DE UNIDAD</h3>", unsafe_allow_html=True)
+
+        lista_ocs_est = df_camara['id_orden'].astype(str).tolist() if not df_camara.empty else ["Sin unidades para estiba"]
+        oc_est_sel = st.selectbox("Seleccione la OC para Liberación de Estiba:", lista_ocs_est, key="est_oc_liberacion_sel")
+
+        st.markdown("<p style='font-weight: 600; color: #333; margin-bottom: 2px;'>⚡ Verificación Final de Inocuidad y Tarimas:</p>", unsafe_allow_html=True)
+        val_estiba_ok = st.toggle("🟢 **¿Estiba y empaque conformes sin daños físicos?** (Activado = SÍ / Desactivado = NO)", value=True, key="toggle_estiba_ok")
+        estado_estiba_val = "CONFORME" if val_estiba_ok else "CON_INCIDENCIAS"
+
+        observaciones_estiba = st.text_area("Observaciones de la Estiba / Calidad de Carga", placeholder="Detalles de estiba, tarimas o estibas especiales...", key="est_obs")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        foto_estiba_final = st.camera_input("📷 FOTO - ESTIBA Y CARGA FINALIZADA", key="est_foto_final")
+
+        if st.button("🚀 FINALIZAR Y LIBERAR ESTIBA", type="primary", use_container_width=True, key="btn_guardar_estiba_final"):
+            try:
+                _, sh, _ = get_db()
+                ws_of = sh.worksheet("Orden_Fincas")
+                all_of_records = ws_of.get_all_records()
+                headers_of = [str(h).strip() for h in ws_of.row_values(1)]
+
+                if "estado_carga" in headers_of and "id_orden" in headers_of and "id_finca" in headers_of:
+                    col_idx_estado = headers_of.index("estado_carga") + 1
+                    for idx, row in enumerate(all_of_records, start=2):
+                        if str(row.get("id_orden", "")).strip() == str(oc_est_sel) and str(row.get("id_finca", "")).strip().upper() == str(finca_actual).upper():
+                            ws_of.update_cell(idx, col_idx_estado, "ESTIBA_LISTA")
+                            break
+
+                st.cache_data.clear()
+                st.success(f"✅ ¡Estiba liberada con éxito para la OC {oc_est_sel} a las {hora_dispositivo}!")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al liberar estiba: {e}")
