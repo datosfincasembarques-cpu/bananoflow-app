@@ -1528,7 +1528,7 @@ rol_actual = str(st.session_state.get("rol", "")).upper()
 finca_actual = str(st.session_state.get("finca_asignada", "TODAS"))
 
 if rol_actual in ["VIGILANCIA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>🛡️ Módulo de Vigilancia - Control de Accesos ({finca_actual})</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - Control de Accesos ({finca_actual})</h2>", unsafe_allow_html=True)
     st.markdown("Control de acceso de unidades programadas y vehículos de Fruta de Tercera (Sin Orden previa)")
 
     df_of_vig, _ = get_df_safe("Orden_Fincas")
@@ -1615,7 +1615,7 @@ if rol_actual in ["VIGILANCIA"]:
                             "fecha_ingreso": datetime.now().strftime("%Y-%m-%d"),
                             "id_finca": str(finca_actual),
                             "chofer": str(chofer_tercera_v),
-                            "placas": str(plates := placas_tercera_v),
+                            "placas": str(placas_tercera_v),
                             "cliente": str(cliente_tercera_v),
                             "hora_ingreso": str(hora_ingreso_val),
                             "estado_despacho": "EN_PLANTA",
@@ -1633,7 +1633,7 @@ if rol_actual in ["VIGILANCIA"]:
                         st.error(f"Error al registrar ingreso en caseta: {e}")
 
 elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: #28a745;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
     st.markdown("Control de cadena de frío, colocación de sellos, termógrafos y estiba en contenedor")
 
     df_of_est, _ = get_df_safe("Orden_Fincas")
@@ -1684,40 +1684,30 @@ elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
             st.error(f"Error al guardar estiba: {e}")
 
 elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
-    st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {finca_actual}</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: #28a745;'>🏭 Módulo de Planta (Jefe de Planta) - {finca_actual}</h2>", unsafe_allow_html=True)
     st.markdown("Control de Producción Diaria (Inventario) y Despachos de Fruta de Tercera")
-
-    df_of, _ = get_df_safe("Orden_Fincas")
-
-    if df_of.empty:
-        df_finca = pd.DataFrame()
-    else:
-        df_finca = df_of if finca_actual.upper() == "TODAS" else df_of[df_of['id_finca'].astype(str).str.upper() == finca_actual.upper()]
-
-    df_planta_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', 'LLEGADO_CASETA', 'EN_PROCESO', 'EN FINCA'])] if not df_finca.empty else df_finca
-    st.metric("Órdenes Abiertas / Disponibles para Surtir en el Día", len(df_planta_pendientes))
-    st.dataframe(df_planta_pendientes, use_container_width=True)
 
     st.markdown("---")
 
     tab_prod, tab_tercera, tab_cons = st.tabs([
-        "📦 REGISTRAR PRODUCCIÓN (PRIMERA, SEGUNDA, DEDO SUELTO)", 
+        "📦 REGISTRAR PRODUCCIÓN DETALLADA", 
         "🚚 GESTIÓN Y DESPACHO FRUTA DE TERCERA", 
         "📊 HISTORIAL GENERAL EN PLANTA"
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with tab_prod:
-        st.markdown("<h3 style='color: #007bff;'>ENTRADA A INVENTARIO - PRODUCCIÓN DIARIA DE EMPAQUE</h3>", unsafe_allow_html=True)
-        st.caption("💡 Registre la producción separada por calidad (Primera, Segunda y Dedo Suelto) y los racimos cortados como parámetro de rendimiento.")
+        st.markdown("<h3 style='color: #28a745;'>ENTRADA A INVENTARIO - PRODUCCIÓN DIARIA DETALLADA</h3>", unsafe_allow_html=True)
+        st.caption("💡 Registre la producción detallada por calidad, tipo de cartón/marca y racimos cortados.")
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             fecha_produccion = st.date_input("Fecha de Producción / Empaque", value=datetime.now().date(), key="planta_fecha_prod")
             cajas_primera = st.number_input("Cajas de Primera", min_value=0, value=1000, step=10, key="planta_cajas_primera")
             cajas_segunda = st.number_input("Cajas de Segunda", min_value=0, value=50, step=5, key="planta_cajas_segunda")
-        with col_p2:
             cajas_dedo_suelto = st.number_input("Dedo Suelto (Cantidad / Cajas)", min_value=0.0, value=0.0, step=1.0, key="planta_dedo_suelto")
+        with col_p2:
+            carton_marca = st.selectbox("Cartón / Marca", ["Bravo brand", "Otra Marca"], index=0, key="planta_carton_marca")
             racimos_procesados = st.number_input("Racimos Procesados (Cortados)", min_value=0, value=950, step=5, key="planta_racimos")
 
         observaciones_planta = st.text_area("Observaciones de la Jornada en Planta", placeholder="Detalles de la cosecha, clima, rendimiento...", key="planta_obs")
@@ -1737,8 +1727,8 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 if not ws_p.get_all_values():
                     ws_p.append_row([
                         "id_produccion", "fecha_produccion", "id_finca", "cajas_primera", 
-                        "cajas_segunda", "dedo_suelto", "racimos_procesados", "observaciones", 
-                        "fecha_registro", "id_usuario", "estado_proceso"
+                        "cajas_segunda", "dedo_suelto", "carton_marca", "racimos_procesados", 
+                        "observaciones", "fecha_registro", "id_usuario", "estado_proceso"
                     ])
 
                 id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -1749,6 +1739,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                     "cajas_primera": str(cajas_primera),
                     "cajas_segunda": str(cajas_segunda),
                     "dedo_suelto": str(cajas_dedo_suelto),
+                    "carton_marca": str(carton_marca),
                     "racimos_procesados": str(racimos_procesados),
                     "observaciones": str(observaciones_planta),
                     "fecha_registro": str(hora_dispositivo),
@@ -1767,11 +1758,11 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 st.error(f"Error al guardar la producción: {e}")
 
     with tab_tercera:
-        st.markdown("<h3 style='color: #007bff;'>GESTIÓN Y CIERRE DE DESPACHO - FRUTA DE TERCERA</h3>", unsafe_allow_html=True)
-        st.caption("💡 Complete los datos de rejas plásticas y cantidad despachada para los vehículos que ingresaron desde caseta, y registre la salida final.")
+        st.markdown("<h3 style='color: #28a745;'>GESTIÓN Y CIERRE DE DESPACHO - FRUTA DE TERCERA (SIN ORDEN)</h3>", unsafe_allow_html=True)
+        st.caption("💡 Complete los datos de rejas plásticas, cantidad y cliente para los vehículos que ingresaron desde caseta sin orden previa, y registre la salida con foto.")
 
         df_terc_act, _ = get_df_safe("Despachos_Tercera")
-        if not df_terc_act.empty:
+        if not df_terc_act.empty and 'estado_despacho' in df_terc_act.columns:
             df_terc_pend = df_terc_act[df_terc_act['estado_despacho'].astype(str).str.upper() == 'EN_PLANTA']
             if not df_terc_pend.empty:
                 st.dataframe(df_terc_pend[['id_despacho_tercera', 'fecha_ingreso', 'chofer', 'placas', 'cliente', 'hora_ingreso']], use_container_width=True)
@@ -1798,11 +1789,12 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                             r_idx = cell.row
                             hora_salida_val = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             
-                            # Actualizar campos clave en Google Sheets
+                            ensure_columns_exist(ws_dt, ["num_rejas_plastico", "cantidad_tercera", "cliente", "hora_salida", "estado_despacho"])
                             ws_dt.update_cell(r_idx, ws_dt.find("estado_despacho").col, "COMPLETADO")
-                            ensure_columns_exist(ws_dt, ["num_rejas_plastico", "cantidad_tercera", "hora_salida"])
                             ws_dt.update_cell(r_idx, ws_dt.find("num_rejas_plastico").col, str(num_rejas_plastico))
                             ws_dt.update_cell(r_idx, ws_dt.find("cantidad_tercera").col, str(cantidad_tercera))
+                            if cliente_final:
+                                ws_dt.update_cell(r_idx, ws_dt.find("cliente").col, str(cliente_final))
                             ws_dt.update_cell(r_idx, ws_dt.find("hora_salida").col, str(hora_salida_val))
                             
                             st.success(f"✅ ¡Despacho de tercera {selected_dt} completado y cerrado con éxito!")
@@ -1818,9 +1810,9 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             st.info("No hay registros de ingresos de fruta de tercera en el sistema.")
 
     with tab_cons:
-        st.markdown("<h3 style='color: #007bff;'>HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #28a745;'>HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
         
-        st.markdown("#### 📦 Producción (Inventario de Primera, Segunda y Dedo Suelto)")
+        st.markdown("#### 📦 Producción (Inventario Detallado)")
         df_prod_hist, _ = get_df_safe("Produccion_Planta")
         if not df_prod_hist.empty:
             df_prod_finca = df_prod_hist if finca_actual.upper() == "TODAS" else df_prod_hist[df_prod_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
