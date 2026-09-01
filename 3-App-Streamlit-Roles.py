@@ -773,129 +773,106 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     else:
                         st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
                         
+   # --------------------------------------------------------------------------
+    # 6.4 Submódulo: 📄 Remisión/Factura
     # --------------------------------------------------------------------------
-    # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
-    # --------------------------------------------------------------------------
-    elif menu_sel == "⚙️ Catálogos Maestros":
-        st.subheader("⚙️ Administración de Catálogos Maestros")
-        st.caption("Visualiza, edita, agrega o elimina registros de las tablas maestras de Google Sheets.")
-        
-        catalogo_sel = st.selectbox("Seleccione el Catálogo a Administrar", [
-            "Tractos", "Cajas", "Operadores", "LineasTransporte", "Fincas", "Clientes", "Destinos", "Empresas"
-        ], key="cat_maestro_sel")
-        
-        df_cat, _ = get_df_safe(catalogo_sel)
-        
-        tab_ver, tab_agregar, tab_editar_eliminar = st.tabs(["📋 Ver Registros", "➕ Agregar Nuevo", "✏️ / 🗑️ Editar o Eliminar"])
-        
-        with tab_ver:
-            st.markdown(f"**Registros actuales en `{catalogo_sel}`** (Total: {len(df_cat)})")
-            if not df_cat.empty:
-                st.dataframe(df_cat, use_container_width=True)
+    if menu_sel == "Remisión/Factura":
+        # Inyección de estilo global para forzar la tipografía Arial en todo el submódulo
+        st.markdown(
+            """
+            <style>
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.subheader("📄 Gestión y Asignación de Lotes, Remisiones y Facturas")
+        st.caption("Seleccione una orden de carga existente para actualizar o asignar los números de lote, remisión y factura correspondientes.")
+
+        df_ordenes, _ = get_df_safe("OrdenesCarga")
+
+        if df_ordenes.empty:
+            st.info("ℹ️ No hay órdenes de carga registradas en el sistema para asociar documentación.")
+        else:
+            # Filtrar opcionalmente por empresa actual si la columna existe
+            if 'id_empresa' in df_ordenes.columns:
+                # O si se relacionan por el creador o empresa principal activa
+                pass
+
+            # Mostrar tabla general de órdenes actuales para referencia rápida
+            st.markdown("#### 📋 Listado General de Órdenes de Carga")
+            cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
+            st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)
+
+            st.markdown("---")
+            st.markdown("#### ✍️ Actualización de Documentación por Orden")
+
+            # Selector de la orden a editar
+            ids_ordenes_disponibles = df_ordenes['id_orden'].astype(str).tolist() if 'id_orden' in df_ordenes.columns else []
+            
+            if not ids_ordenes_disponibles:
+                st.warning("⚠️ No se encontraron IDs de orden válidos.")
             else:
-                st.info("El catálogo está vacío o no se pudo cargar.")
+                orden_sel_act = st.selectbox("Seleccione el ID de la Orden de Carga a Modificar", ids_ordenes_disponibles, key="sel_orden_facturacion")
+
+                # Obtener los datos actuales de la orden seleccionada
+                fila_orden = df_ordenes[df_ordenes['id_orden'].astype(str) == str(orden_sel_act)]
                 
-        with tab_agregar:
-            st.markdown(f"**Agregar un nuevo registro a `{catalogo_sel}`**")
-            if not df_cat.empty:
-                cols_cat = list(df_cat.columns)
-            else:
-                cols_cat = ["id", "nombre"]
-                
-            with st.form(key=f"form_agregar_{catalogo_sel}"):
-                nuevos_datos = {}
-                for col in cols_cat:
-                    if catalogo_sel in ["Tractos", "Tractocamiones"] and col.lower() == "id_linea":
-                        lin_nombres, lin_mapa = lista_simple_no_concat(df_lin, "id_linea", "razon_social")
-                        lin_sel_add = st.selectbox("Línea de Transporte", lin_nombres if lin_nombres else ["Sin líneas"], key=f"add_{catalogo_sel}_{col}_combo")
-                        lin_data_add = lin_mapa.get(lin_sel_add, {})
-                        nuevos_datos[col] = str(lin_data_add.get('id_linea', '') or lin_sel_add)
-                    else:
-                        nuevos_datos[col] = st.text_input(f"Campo: {col}", key=f"add_{catalogo_sel}_{col}")
-                
-                btn_guardar_nuevo = st.form_submit_button("💾 Guardar Registro en Google Sheets", type="primary")
-                if btn_guardar_nuevo:
-                    try:
-                        _, sh, _ = get_db()
-                        ws = sh.worksheet(catalogo_sel)
-                        if append_row_dict_safe(ws, nuevos_datos):
-                            st.success(f"✅ ¡Registro agregado exitosamente a `{catalogo_sel}`!")
-                            time.sleep(1)
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al agregar registro: {e}")
-                        
-        with tab_editar_eliminar:
-            st.markdown(f"**Modificar o Eliminar registros en `{catalogo_sel}`**")
-            if df_cat.empty:
-                st.info("No hay registros disponibles para modificar.")
-            else:
-                col_id_cat = df_cat.columns[0]
-                lista_ids = df_cat[col_id_cat].astype(str).tolist()
-                id_a_modificar = st.selectbox(f"Seleccione por `{col_id_cat}`", lista_ids, key=f"sel_mod_{catalogo_sel}")
-                
-                fila_match = df_cat[df_cat[col_id_cat].astype(str) == str(id_a_modificar)]
-                if not fila_match.empty:
-                    datos_fila = fila_match.iloc[0].to_dict()
+                if not fila_orden.empty:
+                    datos_ord = fila_orden.iloc[0].to_dict()
                     
-                    # Incluimos id_a_modificar en la key del form para asegurar que se redibuje al cambiar de registro en cualquier catálogo
-                    with st.form(key=f"form_mod_{catalogo_sel}_{id_a_modificar}"):
-                        st.markdown(f"Editando registro: **{id_a_modificar}**")
-                        datos_editados = {}
-                        for k, v in datos_fila.items():
-                            if catalogo_sel in ["Tractos", "Tractocamiones"] and k.lower() == "id_linea":
-                                lin_nombres, lin_mapa = lista_simple_no_concat(df_lin, "id_linea", "razon_social")
-                                
-                                current_val = str(v).strip()
-                                default_idx = 0
-                                for idx_l, lname in enumerate(lin_nombres):
-                                    ldata = lin_mapa.get(lname, {})
-                                    lid = str(ldata.get('id_linea', '')).strip()
-                                    if lid.upper() == current_val.upper() or lname.upper() == current_val.upper():
-                                        default_idx = idx_l
-                                        break
-                                        
-                                lin_sel_mod = st.selectbox("Línea de Transporte", lin_nombres if lin_nombres else ["Sin líneas"], index=default_idx, key=f"edit_{catalogo_sel}_{k}_{id_a_modificar}_combo")
-                                lin_data_mod = lin_mapa.get(lin_sel_mod, {})
-                                datos_editados[k] = str(lin_data_mod.get('id_linea', '') or lin_sel_mod)
-                            else:
-                                # Clave dinámica usando el id actual del registro para evitar persistencia errónea entre elementos
-                                datos_editados[k] = st.text_input(f"Modificar {k}", value=str(v), key=f"edit_{catalogo_sel}_{k}_{id_a_modificar}")
+                    val_lote_act = str(datos_ord.get('id_lote', '') or datos_ord.get('lote', ''))
+                    val_rem_act = str(datos_ord.get('folio_remision', '') or datos_ord.get('remision', ''))
+                    val_fac_act = str(datos_ord.get('folio_factura', '') or datos_ord.get('factura', ''))
+                    val_fac2_act = str(datos_ord.get('folio_factura2', '') or datos_ord.get('factura2', ''))
+
+                    with st.form(f"form_act_doc_{orden_sel_act}"):
+                        st.markdown(f"**Editando documentos para la orden:** `{orden_sel_act}`")
                         
-                        col_btn1, col_btn2 = st.columns(2)
-                        with col_btn1:
-                            btn_actualizar = st.form_submit_button("💾 Actualizar Cambios", type="primary")
-                        with col_btn2:
-                            btn_eliminar = st.form_submit_button("🗑️ Eliminar Registro", type="secondary")
-                            
-                        if btn_actualizar:
+                        f_r1, f_r2 = st.columns(2)
+                        with f_r1:
+                            nuevo_lote = st.text_input("Número de Lote", value=val_lote_act, placeholder="Ej: CG-202608300734")
+                            nuevo_rem = st.text_input("Número de Remisión (Folio Remisión)", value=val_rem_act, placeholder="Ej: REM-00123")
+                        with f_r2:
+                            nueva_fac = st.text_input("Número de Factura (Folio Factura)", value=val_fac_act, placeholder="Ej: FAC-00123")
+                            nueva_fac2 = st.text_input("Factura 2 (Opcional - Configuración Full)", value=val_fac2_act, placeholder="Ej: FAC-00124")
+
+                        btn_guardar_docs = st.form_submit_button("💾 Guardar y Actualizar Documentación", use_container_width=True)
+
+                        if btn_guardar_docs:
                             try:
                                 _, sh, _ = get_db()
-                                ws = sh.worksheet(catalogo_sel)
-                                cell = ws.find(str(id_a_modificar))
-                                headers = [str(h).strip() for h in ws.row_values(1)]
+                                ws_ord = sh.worksheet("OrdenesCarga")
                                 
-                                for k, val in datos_editados.items():
-                                    if k in headers:
-                                        idx = headers.index(k) + 1
-                                        ws.update_cell(cell.row, idx, val)
-                                st.success("✅ ¡Registro actualizado correctamente!")
-                                time.sleep(1)
-                                st.rerun()
+                                # Asegurar columnas necesarias en la hoja
+                                ensure_columns_exist(ws_ord, ["id_orden", "id_lote", "folio_remision", "folio_factura", "folio_factura2"])
+
+                                cell_id = ws_ord.find(str(orden_sel_act))
+                                if cell_id:
+                                    row_idx = cell_id.row
+                                    
+                                    # Actualizar celdas según los encabezados de columnas
+                                    header_row = ws_ord.row_values(1)
+                                    
+                                    def actualizar_columna(nombre_col, valor_val):
+                                        if nombre_col in header_row:
+                                            col_idx = header_row.index(nombre_col) + 1
+                                            ws_ord.update_cell(row_idx, col_idx, valor_val)
+
+                                    actualizar_columna("id_lote", nuevo_lote)
+                                    actualizar_columna("folio_remision", nuevo_rem)
+                                    actualizar_columna("folio_factura", nueva_fac)
+                                    actualizar_columna("folio_factura2", nueva_fac2)
+
+                                    st.success(f"✅ ¡Documentación actualizada con éxito para la orden **{orden_sel_act}**!")
+                                    st.balloons()
+                                else:
+                                    st.error("❌ No se pudo localizar la fila de la orden en la base de datos de Google Sheets.")
                             except Exception as e:
-                                st.error(f"Error al actualizar: {e}")
-                                
-                        if btn_eliminar:
-                            try:
-                                _, sh, _ = get_db()
-                                ws = sh.worksheet(catalogo_sel)
-                                cell = ws.find(str(id_a_modificar))
-                                ws.delete_rows(cell.row)
-                                st.success("🗑️ ¡Registro eliminado correctamente de la base de datos!")
-                                time.sleep(1)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error al eliminar: {e}")
+                                st.error(f"Error al actualizar la documentación: {e}")
 # --------------------------------------------------------------------------
     # 6.5 Submódulo: 🛡️ Módulo de Vigilancia (Entrada y Salida en Caseta)
     # --------------------------------------------------------------------------
