@@ -1397,7 +1397,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.dataframe(df_folios, use_container_width=True)
                 st.caption("Control individual de folios para Certificado de Origen, Constancia de Origen, Constancia de Clorinación y Carta Responsiva.")
-    # --------------------------------------------------------------------------
+   # --------------------------------------------------------------------------
     # 6.8 Submódulo: 📖 Seguimiento de Carga y Estatus por Finca
     # --------------------------------------------------------------------------
     elif "Seguimiento" in menu_sel:
@@ -1443,7 +1443,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             st.markdown("---")
             st.markdown("#### ⚙️ Filtros Operativos de Seguimiento")
 
-            # Detectar dinámicamente la columna de finca o cliente/destino si finca no existe directamente
             col_finca_valida = next((c for c in ['finca', 'nombre_finca', 'id_finca', 'empresa', 'id_cliente'] if c in df_seguimiento.columns), None)
             col_estado_valida = next((c for c in ['estado', 'estatus', 'status'] if c in df_seguimiento.columns), None)
 
@@ -1507,7 +1506,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     if not df_detalle_orden.empty:
                         reg_dict = df_detalle_orden.iloc[0].to_dict()
                         
-                        # Mostrar de forma visual y ordenada los datos de la unidad en lugar de solo JSON plano
                         dcol1, dcol2, dcol3 = st.columns(3)
                         with dcol1:
                             st.markdown(f"**Folio / Orden:** {reg_dict.get('folio_orden', reg_dict.get('id_orden', 'N/D'))}")
@@ -1523,7 +1521,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.markdown(f"**Factura:** {reg_dict.get('folio_factura', 'N/D')}")
                         
                         with st.expander("Ver estructura completa en JSON"):
-                            st.json(reg_dict)            
+                            st.json(reg_dict)
+                            
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
