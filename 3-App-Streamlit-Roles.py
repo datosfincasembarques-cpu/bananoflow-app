@@ -1819,7 +1819,7 @@ elif st.session_state.rol == "VIGILANCIA":
             except Exception as e:
                 st.error(f"Error al registrar salida: {e}")
 # --------------------------------------------------------------------------
-    # Módulo 8: 🏭 Control y Captura Operativa (Camareros y Jefes de Planta)
+    # Módulo 8: 🏭 Control y Captura Operativa (Jefes de Planta y Camareros)
     # --------------------------------------------------------------------------
     elif "Módulo 8" in menu_sel or "Captura de Producción" in menu_sel or "Empaque" in menu_sel:
         st.markdown(
@@ -1828,7 +1828,6 @@ elif st.session_state.rol == "VIGILANCIA":
                 *, html, body, [class*="css"], div, span, p, label, input, button, table, th, td, .stTextInput, .stSelectbox, .stMetric {
                     font-family: Arial, sans-serif !important;
                 }
-                /* Estilos personalizados con tonos verdes corporativos equilibrados */
                 .stButton>button {
                     background-color: #2E7D32 !important;
                     color: white !important;
@@ -1849,14 +1848,20 @@ elif st.session_state.rol == "VIGILANCIA":
         )
 
         st.subheader("🏭 Módulo 8: Control Operativo en Planta y Cámaras de Preenfriado")
-        st.caption("Seleccione su rol asignado para realizar la captura correspondiente con trazabilidad de origen y destino.")
+        
+        # Validar sesión activa / rol heredado del sistema si aplica
+        usuario_actual = st.session_state.get('usuario_activo', 'Usuario Operativo')
+        sesion_actual = st.session_state.get('sesion_activa', 'OFICINA_CENTRAL')
+        
+        st.caption(f"Sesión Activa: **{sesion_actual}** | Usuario: **{usuario_actual}**")
+        st.markdown("---")
 
-        # Selector de Rol principal con Pestañas visuales en tonos verdes
-        rol_usuario = st.radio(
-            "👤 Seleccione el Perfil de Operación:",
+        # Selector visual de rol operativo dentro del módulo
+        rol_operacion = st.radio(
+            "👤 Seleccione el Perfil de Operación en Finca:",
             ["👨‍🌾 Jefe de Planta (Producción y Salida Directa)", "❄️ Camarero (Requisición y Control de Preenfriados)"],
             horizontal=True,
-            key="m8_selector_rol"
+            key="m8_selector_rol_principal"
         )
 
         st.markdown("---")
@@ -1864,61 +1869,74 @@ elif st.session_state.rol == "VIGILANCIA":
         # ------------------------------------------------------------------
         # PERFIL 1: JEFE DE PLANTA (PRODUCCIÓN Y SALIDA DESDE FINCA)
         # ------------------------------------------------------------------
-        if "Jefe de Planta" in rol_usuario:
+        if "Jefe de Planta" in rol_operacion:
             st.markdown("#### 🌾 Registro de Producción y Embarque Directo en Finca")
             st.caption("Gestione la fruta procesada directamente en la planta de origen, calidades, marcas de cartón y tiempos de estiba.")
 
-            with st.form("form_jefe_planta"):
+            with st.form("form_jefe_planta_m8"):
                 col_jp1, col_jp2 = st.columns(2)
                 with col_jp1:
-                    finca_produccion = st.selectbox("Finca Origen (Donde se produce)", ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero"], key="jp_finca_orig")
-                    tipo_embarque_jp = st.selectbox("Tipo de Embarque", ["Paletizado", "A granel", "Rejas de plástico (Local)"], key="jp_tipo_emb")
+                    finca_produccion = st.selectbox(
+                        "Finca Origen (Producción de Fruta)", 
+                        ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero", "Finca Central"], 
+                        key="jp_m8_finca_orig"
+                    )
+                    tipo_embarque_jp = st.selectbox(
+                        "Tipo de Embarque", 
+                        ["Paletizado", "A granel", "Rejas de plástico (Local - Fruta de Tercera)"], 
+                        key="jp_m8_tipo_emb"
+                    )
                 with col_jp2:
-                    destino_final = st.text_input("Destino / Cliente / Ruta", placeholder="Ej: Puerto / Planta Destino", key="jp_destino")
-                    chofer_jp = st.text_input("Nombre del Chofer / Operador", key="jp_chofer")
+                    destino_final = st.text_input("Destino / Cliente / Ruta", placeholder="Ej: Puerto / Planta Destino", key="jp_m8_destino")
+                    chofer_jp = st.text_input("Nombre del Chofer / Operador", key="jp_m8_chofer")
 
                 st.markdown("---")
-                st.markdown("##### 📦 Desglose de Cajas, Calidades y Presentaciones")
+                st.markdown("##### 📦 Desglose Detallado de Cajas, Calidades y Presentaciones")
                 
-                if 'df_jp_cajas' not in st.session_state:
-                    st.session_state['df_jp_cajas'] = pd.DataFrame([
+                if 'df_jp_cajas_m8' not in st.session_state:
+                    st.session_state['df_jp_cajas_m8'] = pd.DataFrame([
                         {"No. Cajas": 326, "Calidad": "Segunda", "Cartón / Presentación": "Bravo brand"},
                         {"No. Cajas": 150, "Calidad": "Dedo suelto", "Cartón / Presentación": "Tapa volteada"},
                         {"No. Cajas": 36, "Calidad": "Dedo suelto", "Cartón / Presentación": "Mico"},
                         {"No. Cajas": 36, "Calidad": "Tercera", "Cartón / Presentación": "Reja de plástico"}
                     ])
 
-                jp_editor = st.data_editor(st.session_state['df_jp_cajas'], num_rows="dynamic", use_container_width=True, key="ed_jp_cajas")
+                jp_editor = st.data_editor(
+                    st.session_state['df_jp_cajas_m8'], 
+                    num_rows="dynamic", 
+                    use_container_width=True, 
+                    key="ed_jp_cajas_m8"
+                )
                 total_jp = pd.to_numeric(jp_editor['No. Cajas'], errors='coerce').sum()
                 st.markdown(f"**Total General de Cajas (Producción Finca):** `{int(total_jp):,}` unidades")
 
                 st.markdown("---")
-                st.markdown("##### ⏱️ Tiempos, Inocuidad y Evidencias")
+                st.markdown("##### ⏱️ Tiempos, Inocuidad y Controles en Planta")
                 
                 col_t1, col_t2 = st.columns(2)
                 with col_t1:
-                    h_llegada = st.time_input("Hora de llegada de la unidad", key="jp_hl")
-                    h_inicio = st.time_input("Hora de inicio de estiba", key="jp_hi")
-                    responsable_est = st.text_input("Persona responsable de estibar", key="jp_resp")
+                    h_llegada = st.time_input("Hora de llegada de la unidad", key="jp_m8_hl")
+                    h_inicio = st.time_input("Hora de inicio de estiba", key="jp_m8_hi")
+                    responsable_est = st.text_input("Persona responsable de estibar", key="jp_m8_resp")
                 with col_t2:
-                    h_fin = st.time_input("Hora de fin de estiba", key="jp_hf")
-                    h_salida = st.time_input("Hora de salida de planta", key="jp_hs")
-                    tiene_gatas_jp = st.toggle("¿La unidad cuenta con gatas hidráulicas?", value=True, key="jp_gatas")
+                    h_fin = st.time_input("Hora de fin de estiba", key="jp_m8_hf")
+                    h_salida = st.time_input("Hora de salida de planta", key="jp_m8_hs")
+                    tiene_gatas_jp = st.toggle("¿La unidad cuenta con gatas hidráulicas?", value=True, key="jp_m8_gatas")
 
                 col_e1, col_e2 = st.columns(2)
                 with col_e1:
-                    termografos_jp = st.text_input("IDs de Termógrafos", key="jp_term")
-                    sellos_jp = st.text_input("Cuñas / Sellos de Exportación", key="jp_sellos")
+                    termografos_jp = st.text_input("IDs de Termógrafos (separados por coma)", key="jp_m8_term")
+                    sellos_jp = st.text_input("Cuñas / Sellos de Exportación", key="jp_m8_sellos")
                 with col_e2:
-                    filtro_jp = st.text_input("Serie del Filtro de Unidad", key="jp_filtro")
+                    filtro_jp = st.text_input("Serie del Filtro de Unidad (Aire/Refrigeración)", key="jp_m8_filtro")
 
                 st.markdown("📸 **Evidencias Fotográficas Obligatorias**")
-                foto_limp = st.file_uploader("Evidencia de limpieza de caja (Inocuidad)", type=["jpg", "png"], key="f_limp_jp")
-                foto_est = st.file_uploader("Evidencia de correcta estiba", type=["jpg", "png"], key="f_est_jp")
+                foto_limp = st.file_uploader("Evidencia 1: Condición de limpieza de la caja (Inocuidad alimentos)", type=["jpg", "png", "jpeg"], key="f_limp_jp_m8")
+                foto_est = st.file_uploader("Evidencia 2: Calidad y correcta estiba dentro de la unidad", type=["jpg", "png", "jpeg"], key="f_est_jp_m8")
 
-                btn_save_jp = st.form_submit_button("💾 Guardar Producción de Finca", use_container_width=True)
+                btn_save_jp = st.form_submit_button("💾 Guardar Producción y Salida de Finca", use_container_width=True)
                 if btn_save_jp:
-                    st.success(f"✅ Producción de finca registrada correctamente desde **{finca_produccion}** con un total de **{int(total_jp):,} cajas**.")
+                    st.success(f"✅ Producción de finca registrada exitosamente desde **{finca_produccion}** con un total de **{int(total_jp):,} cajas**.")
                     st.balloons()
 
         # ------------------------------------------------------------------
@@ -1926,27 +1944,40 @@ elif st.session_state.rol == "VIGILANCIA":
         # ------------------------------------------------------------------
         else:
             st.markdown("#### ❄️ Módulo de Cámaras y Preenfriados (Camareros)")
-            st.caption("Requisítese y controle la fruta destinada a preenfriamiento, especificando claramente la finca origen y la finca destino de transferencia.")
+            st.caption("Requisítese y controle la fruta destinada a preenfriamiento, especificando claramente la finca origen (donde se produce) y la finca destino (donde se procesa/almacena).")
 
-            with st.form("form_camareros_preenfriado"):
+            with st.form("form_camareros_preenfriado_m8"):
                 col_c1, col_c2, col_c3 = st.columns(3)
                 with col_c1:
-                    finca_origen_cam = st.selectbox("Finca Origen (Producción)", ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero"], key="cam_orig")
+                    finca_origen_cam = st.selectbox(
+                        "Finca Origen (Producción)", 
+                        ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero", "Finca Central"], 
+                        key="cam_m8_orig"
+                    )
                 with col_c2:
-                    finca_destino_cam = st.selectbox("Finca Destino (Recepción / Cámaras)", ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero"], key="cam_dest")
+                    finca_destino_cam = st.selectbox(
+                        "Finca Destino (Recepción / Cámaras)", 
+                        ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero", "Finca Central"], 
+                        key="cam_m8_dest"
+                    )
                 with col_c3:
-                    id_camara = st.text_input("Identificador de Cámara Fría", placeholder="Ej: Cámara 03", key="cam_id")
+                    id_camara = st.text_input("Identificador de Cámara Fría", placeholder="Ej: Cámara 03", key="cam_m8_id")
 
                 st.markdown("---")
                 st.markdown("##### 📊 Requisición y Cajas en Preenfriado")
 
-                if 'df_cam_cajas' not in st.session_state:
-                    st.session_state['df_cam_cajas'] = pd.DataFrame([
+                if 'df_cam_cajas_m8' not in st.session_state:
+                    st.session_state['df_cam_cajas_m8'] = pd.DataFrame([
                         {"No. Cajas": 200, "Calidad": "Primera", "Cartón / Presentación": "Bravo brand", "Temperatura (°C)": 13.5},
                         {"No. Cajas": 100, "Calidad": "Segunda", "Cartón / Presentación": "Tapa volteada", "Temperatura (°C)": 13.8}
                     ])
 
-                cam_editor = st.data_editor(st.session_state['df_cam_cajas'], num_rows="dynamic", use_container_width=True, key="ed_cam_cajas")
+                cam_editor = st.data_editor(
+                    st.session_state['df_cam_cajas_m8'], 
+                    num_rows="dynamic", 
+                    use_container_width=True, 
+                    key="ed_cam_cajas_m8"
+                )
                 total_cam = pd.to_numeric(cam_editor['No. Cajas'], errors='coerce').sum()
                 st.markdown(f"**Total General en Preenfriado:** `{int(total_cam):,}` cajas")
 
@@ -1955,13 +1986,13 @@ elif st.session_state.rol == "VIGILANCIA":
 
                 col_cm1, col_cm2 = st.columns(2)
                 with col_cm1:
-                    responsable_camara = st.text_input("Camarero Responsable", key="cam_resp")
-                    temp_inicial = st.number_input("Temperatura de Ingreso de Fruta (°C)", value=24.5, step=0.1, key="cam_t_ing")
+                    responsable_camara = st.text_input("Camarero Responsable", key="cam_m8_resp")
+                    temp_inicial = st.number_input("Temperatura de Ingreso de Fruta (°C)", value=24.5, step=0.1, key="cam_m8_t_ing")
                 with col_cm2:
-                    hora_ingreso = st.time_input("Hora de ingreso a cámara", key="cam_hing")
-                    humedad_relativa = st.number_input("Humedad Relativa (%)", value=88.0, step=0.5, key="cam_hum")
+                    hora_ingreso = st.time_input("Hora de ingreso a cámara", key="cam_m8_hing")
+                    humedad_relativa = st.number_input("Humedad Relativa (%)", value=88.0, step=0.5, key="cam_m8_hum")
 
-                observaciones_cam = st.text_area("Observaciones del estado de la fruta y control de frío", key="cam_obs")
+                observaciones_cam = st.text_area("Observaciones del estado de la fruta y control de frío", key="cam_m8_obs")
 
                 btn_save_cam = st.form_submit_button("📥 Registrar Requisición y Entrada a Preenfriado", use_container_width=True)
                 if btn_save_cam:
