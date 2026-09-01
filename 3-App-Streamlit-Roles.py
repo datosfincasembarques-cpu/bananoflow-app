@@ -776,11 +776,14 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 # --------------------------------------------------------------------------
     # 6.4 Submódulo: 📄 Remisión/Factura
     # --------------------------------------------------------------------------
-    if menu_sel == "Remisión/Factura":
-        # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
+    if "Remisión/Factura" in menu_sel:
+        # Inyección de estilo global estricto para forzar la tipografía Arial en toda la interfaz y contenedores
         st.markdown(
             """
             <style>
+                html, body, [class*="css"] {
+                    font-family: Arial, sans-serif !important;
+                }
                 div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stRadio, div.dataframe {
                     font-family: Arial, sans-serif !important;
                 }
