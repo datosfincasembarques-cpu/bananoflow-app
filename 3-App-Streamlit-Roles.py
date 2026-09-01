@@ -1145,17 +1145,11 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 # --------------------------------------------------------------------------
     # 6.6 Submódulo: 📈 Reportes y Concentrados Corporativos
     # --------------------------------------------------------------------------
-    elif menu_sel == "Reportes y Concentrados":
+    elif "Reportes y Concentrados" in menu_sel:
         st.markdown(
             """
             <style>
-                html, body, [class*="css"] {
-                    font-family: Arial, sans-serif !important;
-                }
-                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stDateInput, div.stButton, div.stRadio, div.dataframe, div.stMetric {
-                    font-family: Arial, sans-serif !important;
-                }
-                table, th, td {
+                *, html, body, [class*="css"], div, span, p, label, input, button, table, th, td, .stTextInput, .stSelectbox, .stMetric {
                     font-family: Arial, sans-serif !important;
                 }
             </style>
@@ -1166,8 +1160,11 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         st.subheader("📈 Módulo de Reportes y Concentrados Corporativos")
         st.caption("Filtre, analice y exporte información consolidada de operaciones, volúmenes de cajas y estatus.")
 
-        _, sh_obj, _ = get_db()
-        hojas_disponibles = [ws.title for ws in sh_obj.worksheets()] if sh_obj else []
+        try:
+            _, sh_obj, _ = get_db()
+            hojas_disponibles = [ws.title for ws in sh_obj.worksheets()] if sh_obj else []
+        except Exception:
+            hojas_disponibles = []
 
         nombres_posibles = ["OrdenesCarga", "Órdenes de Carga", "Ordenes", "Órdenes", "Concentrado"]
         hoja_encontrada = None
@@ -1192,9 +1189,8 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             st.warning("⚠️ No se encontraron registros de órdenes en la base de datos o la hoja está vacía.")
             if hojas_disponibles:
                 st.info(f"📋 Hojas detectadas en su Google Sheets: {', '.join(hojas_disponibles)}")
-                st.caption("Verifique que la hoja de órdenes contenga datos y el nombre coincida.")
             else:
-                st.error("No se pudo leer la información de Google Sheets.")
+                st.error("No se pudo establecer conexión o leer la información de Google Sheets.")
         else:
             st.markdown("---")
             st.markdown("#### ⚙️ Filtros Avanzados de Búsqueda")
@@ -1257,7 +1253,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     file_name=f"Concentrado_Corporativo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
-                )                
+                )
     # --------------------------------------------------------------------------
     # 6.7 Submódulo: 📜 Compra y Guías Fitosanitarias (Rangos Individuales)
     # --------------------------------------------------------------------------
