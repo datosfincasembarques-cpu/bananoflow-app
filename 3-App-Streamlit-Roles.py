@@ -901,6 +901,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
                 st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)
                 
+                
 # --------------------------------------------------------------------------
     # 6.5 Submódulo: 🛡️ Módulo de Vigilancia (Entrada y Salida en Caseta)
     # --------------------------------------------------------------------------
