@@ -616,6 +616,78 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
 
+    # --------------------------------------------------------------------------
+    # 6.2 Submódulo: 📦 Órdenes Expedidas
+    # --------------------------------------------------------------------------
+    if "Órdenes Expedidas" in menu_sel or menu_sel == "Órdenes Expedidas":
+        # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
+        st.markdown(
+            """
+            <style>
+                html, body, [class*="css"] {
+                    font-family: Arial, sans-serif !important;
+                }
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stRadio, div.dataframe {
+                    font-family: Arial, sans-serif !important;
+                }
+                table, th, td {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.subheader("📦 Consulta y Gestión de Órdenes Expedidas")
+        st.caption("Visualice el historial detallado de las órdenes de carga generadas y expedidas por el grupo corporativo.")
+
+        df_ordenes, _ = get_df_safe("OrdenesCarga")
+
+        if df_ordenes.empty:
+            st.info("ℹ️ No hay órdenes de carga registradas en el sistema.")
+        else:
+            # Filtrar por empresa principal activa si la columna existe
+            if 'id_empresa' in df_ordenes.columns and 'id_emp_principal' in locals():
+                df_ordenes = df_ordenes[df_ordenes['id_empresa'].astype(str).str.upper() == str(id_emp_principal).upper()]
+
+            if df_ordenes.empty:
+                st.warning(f"⚠️ No hay órdenes expedidas registradas para la empresa actual: **{emp_nombre_principal if 'emp_nombre_principal' in locals() else ''}**.")
+            else:
+                # Opciones de filtrado rápido
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    filtro_estado = st.selectbox("Filtrar por Estado", ["TODOS", "EXPEDIDA", "ACTIVA", "COMPLETADA", "CANCELADA"], key="filtro_estado_exp")
+                with col_f2:
+                    if 'cliente' in df_ordenes.columns:
+                        clientes_disp = ["TODOS"] + sorted(df_ordenes['cliente'].dropna().astype(str).unique().tolist())
+                        filtro_cliente = st.selectbox("Filtrar por Cliente", clientes_disp, key="filtro_cliente_exp")
+                    else:
+                        filtro_cliente = "TODOS"
+
+                df_filtrado = df_ordenes.copy()
+                if filtro_estado != "TODOS" and 'estado' in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado['estado'].astype(str).str.upper() == filtro_estado]
+                if filtro_cliente != "TODOS" and 'cliente' in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado['cliente'].astype(str).str.upper() == filtro_cliente.upper()]
+
+                st.markdown("---")
+                st.markdown(f"#### 📋 Listado de Órdenes ({len(df_filtrado)} registros encontrados)")
+                
+                if df_filtrado.empty:
+                    st.info("ℹ️ No se encontraron órdenes con los filtros seleccionados.")
+                else:
+                    st.dataframe(df_filtrado, use_container_width=True)
+
+                    # Detalle individual de orden
+                    st.markdown("#### 🔍 Detalle Individual de Orden")
+                    ids_disponibles = df_filtrado['id_orden'].astype(str).tolist() if 'id_orden' in df_filtrado.columns else []
+                    
+                    if ids_disponibles:
+                        id_detalles = st.selectbox("Seleccionar ID de Orden para Ver Detalle", ids_disponibles, key="sel_detalle_orden")
+                        fila_det = df_filtrado[df_filtrado['id_orden'].astype(str) == str(id_detalles)]
+                        
+                        if not fila_det.empty:
+                            st.json(fila_det.iloc[0].to_dict())
     
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: 📜 Compra y Guías
