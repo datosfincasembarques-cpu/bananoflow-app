@@ -5,11 +5,58 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import time
+import os
+import openpyxl
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 st.set_page_config(page_title="Control Operativo - Embarques V5", layout="wide", page_icon="🍌")
+
+# ==============================================================================
+# 1.1. CONFIGURACIÓN DE RESPALDOS Y MODO OFFLINE (EXCEL PUENTE)
+# ==============================================================================
+CARPETA_BACKUPS = "backups_finca"
+EXCEL_RESPALDO = "respaldo_pendientes_finca.xlsx"
+
+def limpiar_backures_antiguos():
+    """Elimina respaldos locales con más de 30 días de antigüedad para ahorrar espacio."""
+    try:
+        ahora = time.time()
+        treinta_dias = 30 * 86400
+        for archivo in os.listdir(CARPETA_BACKUPS):
+            ruta_archivo = os.path.join(CARPETA_BACKUPS, archivo)
+            if os.path.isfile(ruta_archivo):
+                if ahora - os.path.getmtime(ruta_archivo) > treinta_dias:
+                    os.remove(ruta_archivo)
+    except:
+        pass
+
+def verificar_y_hacer_backup_automatico():
+    """Verifica si ya se realizó un respaldo hoy y lo descarga de Google Sheets si hay red."""
+    try:
+        if not os.path.exists(CARPETA_BACKUPS):
+            os.makedirs(CARPETA_BACKUPS)
+            
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        archivo_backup_hoy = os.path.join(CARPETA_BACKUPS, f"backup_general_{fecha_hoy}.xlsx")
+        
+        if os.path.exists(archivo_backup_hoy):
+            return
+            
+        _, sh, _ = get_db()
+        worksheets = sh.worksheets()
+        
+        with pd.ExcelWriter(archivo_backup_hoy, engine='openpyxl') as writer:
+            for ws in worksheets:
+                data = ws.get_all_records()
+                df = pd.DataFrame(data) if data else pd.DataFrame()
+                nombre_pestana = ws.title[:31]
+                df.to_excel(writer, sheet_name=nombre_pestana, index=False)
+                
+        limpiar_backures_antiguos()
+    except Exception:
+        pass
 
 
 # ==============================================================================
@@ -103,17 +150,84 @@ def append_row_dict_safe(worksheet, row_dict):
         st.error(f"Error al guardar en Google Sheets: {e}")
         return False
 
+# ==============================================================================
+# 2.1. FUNCIONES DE PUENTE OFFLINE Y SINCRONIZACIÓN
+# ==============================================================================
+def guardar_con_respaldo_offline(sheet_name, dict_data):
+    """Intenta guardar en Google Sheets o respalda en Excel local si no hay red."""
+    try:
+        _, sh, _ = get_db()
+        nombres_h = [w.title for w in sh.worksheets()]
+        if sheet_name in nombres_h:
+            ws = sh.worksheet(sheet_name)
+        else:
+            ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=20)
+            
+        ensure_columns_exist(ws, list(dict_data.keys()))
+        append_row_dict_safe(ws, dict_data)
+        return True, "Guardado exitosamente en la Nube (Google Sheets)."
+    except Exception:
+        try:
+            df_nuevo = pd.DataFrame([dict_data])
+            df_nuevo["sheet_destino"] = sheet_name
+            
+            if os.path.exists(EXCEL_RESPALDO):
+                df_existente = pd.read_excel(EXCEL_RESPALDO)
+                df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+            else:
+                df_final = df_nuevo
+                
+            df_final.to_excel(EXCEL_RESPALDO, index=False)
+            return False, "⚠️ Sin internet: Guardado de emergencia en Excel local."
+        except Exception as ex_excel:
+            return False, f"Error crítico al respaldar localmente: {ex_excel}"
+
+def sincronizar_pendientes_excel():
+    """Sube los registros del Excel puente local a Google Sheets al recuperar red."""
+    if not os.path.exists(EXCEL_RESPALDO):
+        return 0, "No hay datos pendientes de sincronización."
+        
+    try:
+        df_pendientes = pd.read_excel(EXCEL_RESPALDO)
+        if df_pendientes.empty:
+            os.remove(EXCEL_RESPALDO)
+            return 0, "El archivo de respaldo estaba vacío."
+            
+        _, sh, _ = get_db()
+        sincronizados = 0
+        
+        for sheet_name, grupo in df_pendientes.groupby("sheet_destino"):
+            if sheet_name not in [w.title for w in sh.worksheets()]:
+                ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=20)
+            else:
+                ws = sh.worksheet(sheet_name)
+                
+            grupo_limpio = grupo.drop(columns=["sheet_destino"], errors="ignore")
+            
+            for _, row in grupo_limpio.iterrows():
+                dict_fila = row.dropna().to_dict()
+                dict_fila = {str(k): str(v) for k, v in dict_fila.items()}
+                ensure_columns_exist(ws, list(dict_fila.keys()))
+                append_row_dict_safe(ws, dict_fila)
+                sincronizados += 1
+                
+        os.remove(EXCEL_RESPALDO)
+        return sincronizados, f"¡Sincronización exitosa! Se subieron {sincronizados} registros a la nube."
+    except Exception as e:
+        return -1, f"No se pudo sincronizar (verifique su conexión): {e}"
+
+# Comprobación inicial de estado y ejecución del respaldo automático diario
 try:
     _, _, _ = get_db()
     conectado = True
     err_conexion = ""
+    verificar_y_hacer_backup_automatico()
 except Exception as e:
     conectado = False
     err_conexion = str(e)
 
 if "conectado" not in st.session_state:
-    st.session_state.conectado = conectado    
-
+    st.session_state.conectado = conectado
 
 # ==============================================================================
 # 3. GESTIÓN DE SESIÓN Y AUTENTICACIÓN
