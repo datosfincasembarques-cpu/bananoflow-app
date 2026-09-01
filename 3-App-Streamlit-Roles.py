@@ -1524,10 +1524,15 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 # CÓDIGO 7: MÓDULOS OPERATIVOS ADICIONALES (VIGILANCIA, ESTIBA Y PLANTA)
 # ==========================================
 
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import time
+
 rol_actual = str(st.session_state.get("rol", "")).upper()
 finca_actual = str(st.session_state.get("finca_asignada", "TODAS"))
 
-# Estilo visual atractivo en tonos verdes (Emerald / Forest Theme) para una experiencia única
+# Estilo visual atractivo en tonos verdes (Emerald / Forest Theme)
 st.markdown("""
     <style>
     .verde-banner {
@@ -1608,7 +1613,7 @@ if rol_actual in ["VIGILANCIA"]:
 
     with tab_vig_tercera:
         st.markdown("### 🍌 Control de Ingreso y Salida - Fruta de Tercera (Sin Orden)")
-        st.caption("💡 Como la fruta de tercera no está programada, el registro inicia aquí en caseta con hora de entrada, chofer y fotos de evidencia.")
+        st.caption("💡 Registro inicial en caseta con hora de entrada, chofer y fotos de evidencia.")
 
         col_vt1, col_vt2 = st.columns(2)
         with col_vt1:
@@ -1723,38 +1728,55 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     st.markdown("""
         <div class="verde-banner">
             <h2>🏭 Módulo de Planta & Control de Inventario</h2>
-            <p>Registro tabular dinámico de producción, existencias y despachos con total control operativo</p>
+            <p>Registro tabular dinámico de producción, existencias y despachos locales de fruta de tercera</p>
         </div>
     """, unsafe_allow_html=True)
 
     tab_prod, tab_tercera, tab_cons = st.tabs([
         "📋 CAPTURA TABULAR & SALDOS", 
-        "🚚 GESTIÓN Y DESPACHO FRUTA DE TERCERA", 
+        "🚚 GESTIÓN Y DESPACHO LOCAL (FRUTA DE TERCERA)", 
         "📊 HISTORIAL GENERAL EN PLANTA"
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # Cargar opciones dinámicamente desde la base de datos (con respaldos)
+    df_cli_db, _ = get_df_safe("Clientes")
+    if not df_cli_db.empty:
+        col_cli = next((c for c in df_cli_db.columns if 'nombre' in c.lower() or 'cliente' in c.lower()), df_cli_db.columns[0])
+        clientes_opciones = df_cli_db[col_cli].dropna().astype(str).unique().tolist()
+    else:
+        clientes_opciones = ["General / Inventario", "Cliente Local"]
+
+    df_cal_db, _ = get_df_safe("Calidades")
+    if df_cal_db.empty:
+        df_cal_db, _ = get_df_safe("Calidad")
+    if not df_cal_db.empty:
+        col_cal = next((c for c in df_cal_db.columns if 'calidad' in c.lower() or 'nombre' in c.lower()), df_cal_db.columns[0])
+        calidades_opciones = df_cal_db[col_cal].dropna().astype(str).unique().tolist()
+    else:
+        calidades_opciones = ["PRIMERA", "SEGUNDA", "TERCERA", "DEDO SUELTO", "MANITAS PRIMERA", "MANITAS SEGUNDA"]
+
+    df_cart_db, _ = get_df_safe("Cartones")
+    if df_cart_db.empty:
+        df_cart_db, _ = get_df_safe("Tipo_Carton")
+    if not df_cart_db.empty:
+        col_cart = next((c for c in df_cart_db.columns if 'carton' in c.lower() or 'tipo' in c.lower() or 'nombre' in c.lower()), df_cart_db.columns[0])
+        cartones_opciones = df_cart_db[col_cart].dropna().astype(str).unique().tolist()
+    else:
+        cartones_opciones = ["GENERICO", "BRAVO", "TICA BANANA"]
+
     with tab_prod:
         st.markdown("### 🌿 Captura Tabular de Producción Diaria y Existencias")
-        st.caption("✨ Seleccione la fecha como dato principal y agregue filas interactivas por cantidad, calidad, cartón/marca y cliente/finca para calcular existencias al instante.")
+        st.caption("✨ Seleccione la fecha principal y registre la producción. El peso unitario se asigna por defecto (18.86 para cajas, 22 para dedo suelto, 26 para rejas), siendo totalmente editable.")
 
-        # Fecha principal compartida para toda la sesión de captura del día
         fecha_captura = st.date_input("📅 Fecha Principal de Producción / Carga", value=datetime.now().date(), key="tab_fecha_principal")
 
-        # Inicializar estado para la tabla interactiva de captura
         if "rows_captura" not in st.session_state:
             st.session_state.rows_captura = [
-                {"cantidad": 1000.0, "calidad": "1ra - Carmelita", "carton": "Bravo brand", "cliente": "General / Inventario"},
-                {"cantidad": 50.0, "calidad": "2ra - Chava", "carton": "Bravo brand", "cliente": "General / Inventario"}
+                {"cantidad": 1000.0, "calidad": "PRIMERA", "carton": cartones_opciones[0], "cliente": clientes_opciones[0], "peso_unitario": 18.86}
             ]
 
-        # Editor de datos tabular interactivo (Streamlit data_editor)
-        import pandas as pd
         df_template = pd.DataFrame(st.session_state.rows_captura)
-        
-        # Opciones predefinidas para validación visual y consistencia
-        calidades_opciones = ["1ra - Carmelita", "1ra - Adela", "1ra - Don Hugo", "1ra - Manitas", "2ra - Chava", "2ra - Manitas", "Dedo Suelto", "Desperdicio"]
-        cartones_opciones = ["Bravo brand", "Otra Marca", "Genérico", "Sin Cartón"]
 
         st.markdown("👇 **Agregue, edite o modifique los registros directamente en la tabla:**")
         edited_df = st.data_editor(
@@ -1762,21 +1784,23 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             num_rows="dynamic",
             use_container_width=True,
             column_config={
-                "cantidad": st.column_config.NumberColumn("Cantidad (Cajas)", min_value=0.0, step=1.0, format="%.0f"),
+                "cantidad": st.column_config.NumberColumn("Cantidad (Unidades)", min_value=0.0, step=1.0, format="%.0f"),
                 "calidad": st.column_config.SelectboxColumn("Calidad", options=calidades_opciones, required=True),
-                "carton": st.column_config.SelectboxColumn("Cartón / Marca", options=cartones_opciones, required=True),
-                "cliente": st.column_config.TextColumn("Cliente / Destino / Finca", required=True)
+                "carton": st.column_config.SelectboxColumn("Tipo de Cartón", options=cartones_opciones, required=True),
+                "cliente": st.column_config.SelectboxColumn("Cliente", options=clientes_opciones, required=True),
+                "peso_unitario": st.column_config.NumberColumn("Peso Unit. (kg) [18.86 / 22 / 26]", min_value=0.0, step=0.01, format="%.2f")
             },
             key="editor_produccion_tabular"
         )
 
+        if not edited_df.empty:
+            edited_df["peso_total_kg"] = edited_df["cantidad"] * edited_df["peso_unitario"]
+
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Panel de Existencias Calculadas en Tiempo Real
         st.markdown("### 📊 Existencias y Saldos Calculados (En Vivo)")
         if not edited_df.empty:
-            # Calcular totales agrupados por calidad y cartón
-            df_resumen = edited_df.groupby(["calidad", "carton"], as_index=False)["cantidad"].sum()
+            df_resumen = edited_df.groupby(["calidad", "carton"], as_index=False)[["cantidad", "peso_total_kg"]].sum()
             
             cols_metricas = st.columns(min(len(df_resumen), 4) if not df_resumen.empty else 1)
             for idx, row in df_resumen.iterrows():
@@ -1786,7 +1810,8 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                         <div class="metric-box">
                             <span style="font-size: 0.85rem; color: #155724; font-weight: bold;">{row['calidad']}</span><br>
                             <span style="font-size: 0.75rem; color: #6c757d;">{row['carton']}</span><br>
-                            <span style="font-size: 1.4rem; color: #28a745; font-weight: 800;">{row['cantidad']:,.0f} cjs</span>
+                            <span style="font-size: 1.3rem; color: #28a745; font-weight: 800;">{row['cantidad']:,.0f} un.</span><br>
+                            <span style="font-size: 0.8rem; color: #495057;">({row['peso_total_kg']:,.2f} kg)</span>
                         </div>
                     """, unsafe_allow_html=True)
         else:
@@ -1801,28 +1826,33 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 if "Produccion_Planta" in nombres_hojas:
                     ws_p = sh.worksheet("Produccion_Planta")
                 else:
-                    ws_p = sh.add_worksheet(title="Produccion_Planta", rows=1000, cols=15)
+                    ws_p = sh.add_worksheet(title="Produccion_Planta", rows=1000, cols=20)
 
                 headers_prod = [
                     "id_produccion", "fecha_produccion", "id_finca", 
-                    "cantidad", "calidad", "carton", "cliente", 
+                    "cantidad", "calidad", "carton", "cliente", "peso_unitario", "peso_total_kg",
                     "fecha_registro", "id_usuario", "estado_proceso"
                 ]
 
                 if not ws_p.get_all_values():
                     ws_p.append_row(headers_prod)
 
-                # Guardar cada fila editada de la tabla
                 for _, row in edited_df.iterrows():
                     id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{int(row.name)}"
+                    p_unit = float(row["peso_unitario"])
+                    cant = float(row["cantidad"])
+                    p_tot = cant * p_unit
+
                     dict_reg_p = {
                         "id_produccion": id_reg_p,
                         "fecha_produccion": str(fecha_captura),
                         "id_finca": str(finca_actual),
-                        "cantidad": str(row["cantidad"]),
+                        "cantidad": str(cant),
                         "calidad": str(row["calidad"]),
                         "carton": str(row["carton"]),
                         "cliente": str(row["cliente"]),
+                        "peso_unitario": str(p_unit),
+                        "peso_total_kg": str(p_tot),
                         "fecha_registro": str(hora_dispositivo),
                         "id_usuario": str(st.session_state.get("username", "jefe_planta")),
                         "estado_proceso": "REGISTRO_TABULAR"
@@ -1838,53 +1868,83 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 st.error(f"Error al guardar la producción tabular: {e}")
 
     with tab_tercera:
-        st.markdown("<h3 style='color: #28a745;'>🚚 GESTIÓN Y CIERRE DE DESPACHO - FRUTA DE TERCERA (SIN ORDEN)</h3>", unsafe_allow_html=True)
-        st.caption("💡 Complete los datos de rejas plásticas, cantidad y cliente para los vehículos que ingresaron desde caseta sin orden previa, y registre la salida.")
+        st.markdown("<h3 style='color: #28a745;'>🚚 GESTIÓN Y DESPACHO LOCAL - FRUTA DE TERCERA (SIN ORDEN)</h3>", unsafe_allow_html=True)
+        st.caption("💡 Módulo exclusivo para despacho local donde el Jefe de Planta integra directamente los datos del cliente, operador, vehículo y empaque en reja de plástico.")
 
-        df_terc_act, _ = get_df_safe("Despachos_Tercera")
-        if not df_terc_act.empty and 'estado_despacho' in df_terc_act.columns:
-            df_terc_pend = df_terc_act[df_terc_act['estado_despacho'].astype(str).str.upper() == 'EN_PLANTA']
-            if not df_terc_pend.empty:
-                st.dataframe(df_terc_pend[['id_despacho_tercera', 'fecha_ingreso', 'chofer', 'placas', 'cliente', 'hora_ingreso']], use_container_width=True)
-                
-                selected_dt = st.selectbox("Seleccione el ID de Despacho de Tercera a Completar", df_terc_pend['id_despacho_tercera'].tolist(), key="select_dt_planta")
-                
-                col_dt1, col_dt2 = st.columns(2)
-                with col_dt1:
-                    num_rejas_plastico = st.number_input("Número de Rejas de Plástico", min_value=0, value=0, step=1, key="planta_rejas_tercera")
-                    cantidad_tercera = st.number_input("Cantidad de Tercera Despachada", min_value=0.0, value=0.0, step=1.0, key="planta_cant_tercera")
-                with col_dt2:
-                    cliente_final = st.text_input("Cliente Confirmado", key="planta_cliente_tercera")
-                    obs_planta_tercera = st.text_area("Observaciones del Jefe de Planta", key="planta_obs_tercera")
+        col_dt_1, col_dt_2 = st.columns(2)
+        with col_dt_1:
+            st.markdown("#### 👤 Datos del Cliente y Operador")
+            cliente_tercera_local = st.selectbox("Cliente", options=clientes_opciones, key="terc_loc_cliente")
+            nombre_operador = st.text_input("Nombre del Operador", key="terc_loc_operador")
+            num_licencia = st.text_input("Número de Licencia Operador", key="terc_loc_licencia")
+            
+            st.markdown("#### 📦 Empaque y Cantidad")
+            tipo_empaque = st.selectbox("Tipo de Empaque", options=["REJA DE PLÁSTICO"], index=0, key="terc_loc_empaque")
+            cantidad_rejas = st.number_input("Cantidad", min_value=0.0, value=0.0, step=1.0, key="terc_loc_cantidad")
+            peso_unitario_reja = st.number_input("Peso Unitario (kg) [Predeterminado 26]", value=26.0, step=0.1, key="terc_loc_peso_unit")
 
-                if st.button("✅ CERRAR Y REGISTRAR SALIDA DE DESPACHO DE TERCERA", type="primary", use_container_width=True, key="btn_cerrar_tercera"):
-                    try:
-                        _, sh_dt, _ = get_db()
-                        ws_dt = sh_dt.worksheet("Despachos_Tercera")
-                        cell = ws_dt.find(str(selected_dt))
-                        if cell:
-                            r_idx = cell.row
-                            hora_salida_val = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            
-                            ensure_columns_exist(ws_dt, ["num_rejas_plastico", "cantidad_tercera", "cliente", "hora_salida", "estado_despacho"])
-                            ws_dt.update_cell(r_idx, ws_dt.find("estado_despacho").col, "COMPLETADO")
-                            ws_dt.update_cell(r_idx, ws_dt.find("num_rejas_plastico").col, str(num_rejas_plastico))
-                            ws_dt.update_cell(r_idx, ws_dt.find("cantidad_tercera").col, str(cantidad_tercera))
-                            if cliente_final:
-                                ws_dt.update_cell(r_idx, ws_dt.find("cliente").col, str(cliente_final))
-                            ws_dt.update_cell(r_idx, ws_dt.find("hora_salida").col, str(hora_salida_val))
-                            
-                            st.success(f"✅ ¡Despacho de tercera {selected_dt} completado y cerrado con éxito!")
-                            time.sleep(1.5)
-                            st.rerun()
-                        else:
-                            st.error("No se encontró el registro seleccionado.")
-                    except Exception as e:
-                        st.error(f"Error al cerrar despacho: {e}")
+        with col_dt_2:
+            st.markdown("#### 🚛 Datos del Vehículo / Transporte")
+            marca_carro = st.text_input("Marca del Carro", key="terc_loc_marca")
+            modelo_carro = st.text_input("Modelo", key="terc_loc_modelo")
+            placas_carro = st.text_input("Placas", key="terc_loc_placas")
+            
+            obs_tercera_local = st.text_area("Observaciones del Despacho Local", key="terc_loc_obs")
+
+        peso_total_tercera = cantidad_rejas * peso_unitario_reja
+        st.info(f"⚖️ Peso Total Calculado de Tercera: **{peso_total_tercera:,.2f} kg** (Basado en {cantidad_rejas} rejas a {peso_unitario_reja} kg c/u)")
+
+        if st.button("🚨 REGISTRAR Y CERRAR DESPACHO LOCAL DE TERCERA", type="primary", use_container_width=True, key="btn_guardar_tercera_local"):
+            if not nombre_operador or not placas_carro or cantidad_rejas <= 0:
+                st.warning("Debe ingresar el nombre del operador, las placas del vehículo y una cantidad válida.")
             else:
-                st.info("No hay vehículos de fruta de tercera en planta pendientes de cierre.")
-        else:
-            st.info("No hay registros de ingresos de fruta de tercera en el sistema.")
+                try:
+                    _, sh_dt, _ = get_db()
+                    nombres_h = [w.title for w in sh_dt.worksheets()]
+                    if "Despachos_Tercera" in nombres_h:
+                        ws_dt = sh_dt.worksheet("Despachos_Tercera")
+                    else:
+                        ws_dt = sh_dt.add_worksheet(title="Despachos_Tercera", rows=1000, cols=25)
+
+                    headers_terc = [
+                        "id_despacho_tercera", "fecha_ingreso", "id_finca", "cliente", 
+                        "nombre_operador", "numero_licencia", "tipo_empaque", "cantidad_rejas", 
+                        "peso_unitario", "peso_total_kg", "marca_carro", "modelo_carro", 
+                        "placas", "estado_despacho", "observaciones", "fecha_registro", "id_usuario"
+                    ]
+
+                    if not ws_dt.get_all_values():
+                        ws_dt.append_row(headers_terc)
+
+                    id_dt = f"TERC-LOC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    dict_dt = {
+                        "id_despacho_tercera": id_dt,
+                        "fecha_ingreso": str(datetime.now().strftime("%Y-%m-%d")),
+                        "id_finca": str(finca_actual),
+                        "cliente": str(cliente_tercera_local),
+                        "nombre_operador": str(nombre_operador),
+                        "numero_licencia": str(num_licencia),
+                        "tipo_empaque": str(tipo_empaque),
+                        "cantidad_rejas": str(cantidad_rejas),
+                        "peso_unitario": str(peso_unitario_reja),
+                        "peso_total_kg": str(peso_total_tercera),
+                        "marca_carro": str(marca_carro),
+                        "modelo_carro": str(modelo_carro),
+                        "placas": str(placas_carro),
+                        "estado_despacho": "COMPLETADO_LOCAL",
+                        "observaciones": str(obs_tercera_local),
+                        "fecha_registro": str(hora_dispositivo),
+                        "id_usuario": str(st.session_state.get("username", "jefe_planta"))
+                    }
+
+                    ensure_columns_exist(ws_dt, list(dict_dt.keys()))
+                    append_row_dict_safe(ws_dt, dict_dt)
+
+                    st.success(f"✅ ¡Despacho local de fruta de tercera registrado con éxito! Folio: {id_dt}")
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al registrar despacho local: {e}")
 
     with tab_cons:
         st.markdown("<h3 style='color: #28a745;'>📊 HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
@@ -1898,7 +1958,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             st.info("No hay registros de producción previos.")
 
         st.markdown("---")
-        st.markdown("#### 🚚 Despachos e Historial de Fruta de Tercera")
+        st.markdown("#### 🚚 Despachos Locales e Historial de Fruta de Tercera")
         df_terc_hist, _ = get_df_safe("Despachos_Tercera")
         if not df_terc_hist.empty:
             df_terc_finca = df_terc_hist if finca_actual.upper() == "TODAS" else df_terc_hist[df_terc_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
