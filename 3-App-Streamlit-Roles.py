@@ -921,141 +921,133 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)                
                 
 # --------------------------------------------------------------------------
-    # 6.5 Submódulo: 🛡️ Módulo de Vigilancia (Entrada y Salida en Caseta)
+    # 6.5 Submódulo: ⚙️ Catálogos Maestros
     # --------------------------------------------------------------------------
-    elif menu_sel == "🛡️ Módulo de Vigilancia":
-        st.markdown("<h2 style='color: #28a745;'>🛡️ Módulo de Vigilancia - Control de Caseta</h2>", unsafe_allow_html=True)
-        st.markdown("Vehículos Pendientes en Finca")
-        
-        finca_actual = str(st.session_state.get('finca_asignada', '6'))
-        if 'df_of' in locals() and not df_of.empty:
-            df_finca = df_of if finca_actual == "TODAS" else df_of[df_of['id_finca'].astype(str) == finca_actual]
-        else:
-            df_finca, _ = get_df_safe("Orden_Fincas")
-            
-        df_pendientes = df_finca[df_finca['estado_carga'].astype(str).str.upper().isin(['PENDIENTE', ''])] if not df_finca.empty else df_finca
-        st.dataframe(df_pendientes, use_container_width=True)
-        
-        st.markdown("---")
-        
-        tab_ent, tab_sal = st.tabs(["📥 REGISTRAR ENTRADA", "📤 REGISTRAR SALIDA"])
-        
-        import pytz
-        try:
-            zona_local = pytz.timezone('America/Mexico_City')
-            hora_dispositivo = datetime.now(zona_local).strftime("%Y-%m-%d %H:%M:%S")
-        except:
-            hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if "Catálogos Maestros" in menu_sel:
+        # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
+        st.markdown(
+            """
+            <style>
+                html, body, [class*="css"] {
+                    font-family: Arial, sans-serif !important;
+                }
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stTabs, div.dataframe {
+                    font-family: Arial, sans-serif !important;
+                }
+                table, th, td {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
 
-        with tab_ent:
-            st.markdown("<h3 style='color: #28a745;'>ENTRADA FINCA</h3>", unsafe_allow_html=True)
-            
-            lista_ocs = df_pendientes['id_orden'].astype(str).tolist() if not df_pendientes.empty else ["Sin OC pendientes"]
-            oc_sel = st.selectbox("OC:", lista_ocs, key="vis_oc_sel")
-            
-            placa_guia = st.text_input("Placa / Guía:", placeholder="Ej: 123-ABC / GT-8821", key="vis_placa_input")
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("<div style='border: 2px dashed #28a745; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
-            foto_tractor = st.camera_input("📷 FOTO 1 - TRACTOR FRENTE (Toca para abrir cámara)", key="vis_foto_tractor")
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("<div style='border: 2px dashed #28a745; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
-            foto_caja = st.camera_input("📷 FOTO 2 - CAJA TRASERA (Toca para abrir cámara)", key="vis_foto_caja")
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            if st.button("✅ GUARDAR ENTRADA", type="primary", use_container_width=True, key="btn_guardar_entrada_estilo"):
-                if not placa_guia:
-                    st.error("⚠️ Debe ingresar la Placa o Guía del vehículo.")
-                else:
-                    try:
-                        _, sh, _ = get_db()
-                        ws_v = sh.worksheet("vigilancia_registro")
-                        id_reg = f"VIG-ENT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                        
-                        dict_reg = {
-                            "id_registro": id_reg,
-                            "id_orden": str(oc_sel),
-                            "id_finca": str(finca_actual),
-                            "id_caja": str(placa_guia),
-                            "tipo_evento": "LLEGADA_CASETA",
-                            "fecha_hora": str(hora_dispositivo),
-                            "foto_tractor_placa_url": "CARGADA" if foto_tractor is not None else "PENDIENTE",
-                            "foto_caja_placa_url": "CARGADA" if foto_caja is not None else "PENDIENTE",
-                            "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                            "observaciones": f"Placa/Guía: {placa_guia}"
-                        }
-                        
-                        ensure_columns_exist(ws_v, list(dict_reg.keys()))
-                        append_row_dict_safe(ws_v, dict_reg)
-                        
-                        ws_of = sh.worksheet("Orden_Fincas")
-                        cell_of = ws_of.find(str(oc_sel))
-                        if cell_of:
-                            headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-                            if "estado_carga" in headers_of:
-                                ws_of.update_cell(cell_of.row, headers_of.index("estado_carga") + 1, "LLEGADO_CASETA")
-                                
-                        st.success(f"✅ ¡Entrada guardada con éxito a las {hora_dispositivo}!")
-                        time.sleep(1.5)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al guardar: {e}")
+        st.subheader("⚙️ Gestión de Catálogos Maestros")
+        st.caption("Administre y actualice los registros principales del sistema (Clientes, Fincas, Equipos y Letras de Remisión).")
 
-        with tab_sal:
-            st.markdown("<h3 style='color: #d9534f;'>SALIDA DE FINCA</h3>", unsafe_allow_html=True)
-            df_salidas = df_finca[df_finca['estado_carga'].astype(str).str.upper() == 'LLEGADO_CASETA'] if not df_finca.empty else df_finca
-            lista_salidas = df_salidas['id_orden'].astype(str).tolist() if not df_salidas.empty else ["Sin unidades en sitio"]
+        tab_cat1, tab_cat2, tab_cat3 = st.tabs(["👥 Clientes", "🏡 Fincas / Predios", "🚛 Equipos y Transporte"])
+
+        with tab_cat1:
+            st.markdown("### 👥 Catálogo de Clientes (con Letra y Prefijo de Remisión)")
             
-            oc_sal_sel = st.selectbox("OC en Sitio:", lista_salidas, key="vis_oc_sal_sel")
-            placa_sal = st.text_input("Placa / Guía de Salida:", key="vis_placa_sal")
-            
-            st.markdown("<div style='border: 2px dashed #d9534f; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
-            foto_tr_sal = st.camera_input("📷 FOTO SALIDA - TRACTOR FRENTE", key="vis_foto_tr_sal")
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            st.markdown("<div style='border: 2px dashed #d9534f; padding: 10px; border-radius: 10px; text-align: center;'>", unsafe_allow_html=True)
-            foto_cj_sal = st.camera_input("📷 FOTO SALIDA - CAJA TRASERA", key="vis_foto_cj_sal")
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            if st.button("🚀 GUARDAR SALIDA", type="primary", use_container_width=True, key="btn_guardar_salida_estilo"):
-                try:
-                    _, sh, _ = get_db()
-                    ws_v = sh.worksheet("vigilancia_registro")
-                    id_reg_s = f"VIG-SAL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    
-                    dict_reg_s = {
-                        "id_registro": id_reg_s,
-                        "id_orden": str(oc_sal_sel),
-                        "id_finca": str(finca_actual),
-                        "id_caja": str(placa_sal),
-                        "tipo_evento": "SALIDA_CASETA",
-                        "fecha_hora": str(hora_dispositivo),
-                        "foto_tractor_placa_url": "CARGADA_SALIDA" if foto_tr_sal is not None else "PENDIENTE",
-                        "foto_caja_placa_url": "CARGADA_SALIDA" if foto_cj_sal is not None else "PENDIENTE",
-                        "id_usuario_vigilante": str(st.session_state.get("username", "vigilante")),
-                        "observaciones": f"Salida Placa/Guía: {placa_sal}"
-                    }
-                    
-                    ensure_columns_exist(ws_v, list(dict_reg_s.keys()))
-                    append_row_dict_safe(ws_v, dict_reg_s)
-                    
-                    ws_of = sh.worksheet("Orden_Fincas")
-                    cell_of = ws_of.find(str(oc_sal_sel))
-                    if cell_of:
-                        headers_of = [str(h).strip() for h in ws_of.row_values(1)]
-                        if "estado_carga" in headers_of:
-                            ws_of.update_cell(cell_of.row, headers_of.index("estado_carga") + 1, "COMPLETADO_SALIDA")
+            # Asegurar estructura de columnas en la hoja Clientes incluyendo letra_remision
+            try:
+                _, sh_db, _ = get_db()
+                ws_cli = sh_db.worksheet("Clientes")
+                ensure_columns_exist(ws_cli, ["id_cliente", "razon_social", "rfc", "domicilio", "contacto", "telefono", "letra_remision"])
+            except Exception:
+                pass
+
+            df_cli, _ = get_df_safe("Clientes")
+
+            if not df_cli.empty:
+                st.dataframe(df_cli, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay clientes registrados actualmente en la base de datos.")
+
+            st.markdown("#### ➕ Registrar o Actualizar Cliente")
+            with st.form("form_cat_cliente"):
+                cc1, cc2 = st.columns(2)
+                with cc1:
+                    cli_id = st.text_input("ID del Cliente", placeholder="Ej: CLI-001")
+                    cli_razon = st.text_input("Razón Social", placeholder="Ej: Empresa La Rioja")
+                    cli_rfc = st.text_input("RFC", placeholder="Ej: RIO260101XXX")
+                with cc2:
+                    cli_dom = st.text_input("Domicilio", placeholder="Ej: Carretera Principal Km 5")
+                    cli_cont = st.text_input("Contacto", placeholder="Ej: Juan Pérez")
+                    cli_tel = st.text_input("Teléfono", placeholder="Ej: 9991234567")
+                    cli_letra = st.text_input("Letra / Prefijo de Remisión", placeholder="Ej: Z102 o Y123")
+
+                btn_guardar_cli = st.form_submit_button("💾 Guardar / Actualizar Cliente", use_container_width=True)
+
+                if btn_guardar_cli:
+                    if not cli_id.strip() or not cli_razon.strip():
+                        st.warning("⚠️ El ID y la Razón Social son obligatorios.")
+                    else:
+                        try:
+                            _, sh, _ = get_db()
+                            ws_c = sh.worksheet("Clientes")
+                            ensure_columns_exist(ws_c, ["id_cliente", "razon_social", "rfc", "domicilio", "contacto", "telefono", "letra_remision"])
                             
-                    st.success(f"✅ ¡Salida registrada con éxito a las {hora_dispositivo}!")
-                    time.sleep(1.5)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al registrar salida: {e}")
+                            cell_c = ws_c.find(str(cli_id.strip()))
+                            nuevo_registro = {
+                                "id_cliente": cli_id.strip(),
+                                "razon_social": cli_razon.strip(),
+                                "rfc": cli_rfc.strip(),
+                                "domicilio": cli_dom.strip(),
+                                "contacto": cli_cont.strip(),
+                                "telefono": cli_tel.strip(),
+                                "letra_remision": cli_letra.strip().upper()
+                            }
+                            
+                            if cell_c:
+                                row_idx = cell_c.row
+                                header_vals = ws_c.row_values(1)
+                                for k, v in nuevo_registro.items():
+                                    if k in header_vals:
+                                        c_idx = header_vals.index(k) + 1
+                                        ws_c.update_cell(row_idx, c_idx, v)
+                                st.success(f"✅ ¡Cliente **{cli_id}** actualizado con éxito!")
+                            else:
+                                append_row_dict_safe(ws_c, nuevo_registro)
+                                st.success(f"✅ ¡Cliente **{cli_id}** registrado con éxito!")
+                            st.balloons()
+                        except Exception as e:
+                            st.error(f"Error al guardar el cliente: {e}")
 
+        with tab_cat2:
+            st.markdown("### 🏡 Catálogo de Fincas")
+            df_fin, _ = get_df_safe("Fincas")
+            if not df_fin.empty:
+                st.dataframe(df_fin, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay fincas registradas actualmente.")
+
+            with st.form("form_cat_finca"):
+                f_id = st.text_input("ID o Código de Finca", placeholder="Ej: FIN-01")
+                f_nombre = st.text_input("Nombre de la Finca", placeholder="Ej: Doña Emilia")
+                btn_finca = st.form_submit_button("💾 Guardar Finca", use_container_width=True)
+                if btn_finca:
+                    if not f_id.strip():
+                        st.warning("⚠️ Ingrese el ID de la finca.")
+                    else:
+                        try:
+                            _, sh, _ = get_db()
+                            ws_f = sh.worksheet("Fincas")
+                            ensure_columns_exist(ws_f, ["id_finca", "nombre_finca"])
+                            append_row_dict_safe(ws_f, {"id_finca": f_id.strip(), "nombre_finca": f_nombre.strip()})
+                            st.success(f"✅ Finca **{f_nombre}** registrada correctamente.")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+        with tab_cat3:
+            st.markdown("### 🚛 Catálogo de Equipos y Transporte")
+            df_eq, _ = get_df_safe("Tractores")
+            if not df_eq.empty:
+                st.dataframe(df_eq, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay equipos de transporte registrados actualmente.")
+                
 # --------------------------------------------------------------------------
     # 6.6 Submódulo: 📜 Compra y Guías Fitosanitarias (Rangos Individuales)
     # --------------------------------------------------------------------------
