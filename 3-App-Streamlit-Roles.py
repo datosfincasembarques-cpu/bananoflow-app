@@ -1529,43 +1529,108 @@ finca_actual = str(st.session_state.get("finca_asignada", "TODAS"))
 
 if rol_actual in ["VIGILANCIA"]:
     st.markdown(f"<h2 style='color: #007bff;'>🛡️ Módulo de Vigilancia - Control de Accesos ({finca_actual})</h2>", unsafe_allow_html=True)
-    st.markdown("Registro de entrada y salida de unidades y transporte en caseta")
+    st.markdown("Control de acceso de unidades programadas y vehículos de Fruta de Tercera (Sin Orden previa)")
 
     df_of_vig, _ = get_df_safe("Orden_Fincas")
     
-    col_v1, col_v2 = st.columns(2)
-    with col_v1:
-        st.markdown("### 📥 Registrar Entrada de Unidad")
-        id_orden_vig = st.text_input("ID de Orden o Folio de Carga", key="vig_id_orden")
-        placa_vehiculo = st.text_input("Placas del Transporte / Contenedor", key="vig_placas")
-        chofer_nombre = st.text_input("Nombre del Conductor", key="vig_chofer")
-        
-        if st.button("registrar llegada a caseta", type="primary", key="btn_vig_entrada"):
-            if not id_orden_vig or not placa_vehiculo:
-                st.warning("Debe ingresar el ID de la orden y las placas del vehículo.")
-            else:
-                try:
-                    _, sh_v, _ = get_db()
-                    ws_of = sh_v.worksheet("Orden_Fincas")
-                    cell = ws_of.find(str(id_orden_vig))
-                    if cell:
-                        row_idx = cell.row
-                        ws_of.update_cell(row_idx, ws_of.find("estado_carga").col, "LLEGADO_CASETA")
-                        st.success(f"✅ Unidad {placa_vehiculo} registrada en caseta para la orden {id_orden_vig}.")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("No se encontró la orden especificada en el sistema.")
-                except Exception as e:
-                    st.error(f"Error al registrar entrada: {e}")
+    tab_vig_ord, tab_vig_tercera = st.tabs(["🚛 UNIDADES CON ORDEN DE CARGA", "🍌 VEHÍCULOS DE FRUTA DE TERCERA (IMPREVISTOS)"])
 
-    with col_v2:
-        st.markdown("### 📤 Unidades en Planta / Finca")
-        if not df_of_vig.empty:
-            df_vig_activas = df_of_vig[df_of_vig['id_finca'].astype(str).str.upper() == finca_actual.upper()] if finca_actual.upper() != "TODAS" else df_of_vig
-            st.dataframe(df_vig_activas[['id_orden', 'id_finca', 'estado_carga', 'transportista']], use_container_width=True)
-        else:
-            st.info("No hay órdenes activas actualmente.")
+    with tab_vig_ord:
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            st.markdown("### 📥 Registrar Entrada / Salida (Orden)")
+            id_orden_vig = st.text_input("ID de Orden o Folio de Carga", key="vig_id_orden")
+            placa_vehiculo = st.text_input("Placas del Transporte / Contenedor", key="vig_placas")
+            chofer_nombre = st.text_input("Nombre del Conductor", key="vig_chofer")
+            
+            if st.button("✅ Registrar Llegada a Caseta", type="primary", key="btn_vig_entrada"):
+                if not id_orden_vig or not placa_vehiculo:
+                    st.warning("Debe ingresar el ID de la orden y las placas del vehículo.")
+                else:
+                    try:
+                        _, sh_v, _ = get_db()
+                        ws_of = sh_v.worksheet("Orden_Fincas")
+                        cell = ws_of.find(str(id_orden_vig))
+                        if cell:
+                            row_idx = cell.row
+                            ws_of.update_cell(row_idx, ws_of.find("estado_carga").col, "LLEGADO_CASETA")
+                            st.success(f"✅ Unidad {placa_vehiculo} registrada en caseta para la orden {id_orden_vig}.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("No se encontró la orden especificada en el sistema.")
+                    except Exception as e:
+                        st.error(f"Error al registrar entrada: {e}")
+
+        with col_v2:
+            st.markdown("### 📤 Unidades Activas en Finca")
+            if not df_of_vig.empty:
+                df_vig_activas = df_of_vig[df_of_vig['id_finca'].astype(str).str.upper() == finca_actual.upper()] if finca_actual.upper() != "TODAS" else df_of_vig
+                st.dataframe(df_vig_activas[['id_orden', 'id_finca', 'estado_carga', 'transportista']], use_container_width=True)
+            else:
+                st.info("No hay órdenes activas actualmente.")
+
+    with tab_vig_tercera:
+        st.markdown("### 🍌 Control de Ingreso y Salida - Fruta de Tercera (Sin Orden)")
+        st.caption("💡 Como la fruta de tercera no está programada, el registro inicia aquí en caseta con hora de entrada, chofer y fotos de evidencia.")
+
+        col_vt1, col_vt2 = st.columns(2)
+        with col_vt1:
+            chofer_tercera_v = st.text_input("Nombre del Conductor / Transportista", key="vig_tercera_chofer")
+            placas_tercera_v = st.text_input("Placas del Vehículo", key="vig_tercera_placas")
+            cliente_tercera_v = st.text_input("Cliente Destino (Opcional)", key="vig_tercera_cliente")
+            
+            st.markdown("📷 **Evidencias Fotográficas de Ingreso**")
+            foto_entrada_frontal = st.camera_input("Foto Entrada Frontal", key="vig_foto_frontal")
+            foto_entrada_trasera = st.camera_input("Foto Entrada Trasera", key="vig_foto_trasera")
+
+        with col_vt2:
+            hora_ingreso_val = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.info(f"🕒 Hora de Registro de Ingreso: {hora_ingreso_val}")
+            
+            obs_vig_tercera = st.text_area("Observaciones de Ingreso en Caseta", key="vig_tercera_obs")
+
+            if st.button("🚨 REGISTRAR INGRESO DE TERCERA A PLANTA", type="primary", use_container_width=True, key="btn_vig_guardar_tercera"):
+                if not chofer_tercera_v or not placas_tercera_v:
+                    st.warning("Debe ingresar el nombre del chofer y las placas del vehículo.")
+                else:
+                    try:
+                        _, sh_vt, _ = get_db()
+                        nombres_h = [w.title for w in sh_vt.worksheets()]
+                        if "Despachos_Tercera" in nombres_h:
+                            ws_dt = sh_vt.worksheet("Despachos_Tercera")
+                        else:
+                            ws_dt = sh_vt.add_worksheet(title="Despachos_Tercera", rows=1000, cols=20)
+
+                        if not ws_dt.get_all_values():
+                            ws_dt.append_row([
+                                "id_despacho_tercera", "fecha_ingreso", "id_finca", "chofer", 
+                                "placas", "cliente", "hora_ingreso", "estado_despacho", 
+                                "observaciones_vigilancia", "id_usuario_vigilancia"
+                            ])
+
+                        id_dt = f"TERC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        dict_dt = {
+                            "id_despacho_tercera": id_dt,
+                            "fecha_ingreso": datetime.now().strftime("%Y-%m-%d"),
+                            "id_finca": str(finca_actual),
+                            "chofer": str(chofer_tercera_v),
+                            "placas": str(plates := placas_tercera_v),
+                            "cliente": str(cliente_tercera_v),
+                            "hora_ingreso": str(hora_ingreso_val),
+                            "estado_despacho": "EN_PLANTA",
+                            "observaciones_vigilancia": str(obs_vig_tercera),
+                            "id_usuario_vigilancia": str(st.session_state.get("username", "vigilancia"))
+                        }
+
+                        ensure_columns_exist(ws_dt, list(dict_dt.keys()))
+                        append_row_dict_safe(ws_dt, dict_dt)
+
+                        st.success(f"✅ Ingreso de vehículo de tercera registrado con éxito. Folio: {id_dt}")
+                        time.sleep(1.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al registrar ingreso en caseta: {e}")
 
 elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
     st.markdown(f"<h2 style='color: #007bff;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
@@ -1620,7 +1685,7 @@ elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
 
 elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {finca_actual}</h2>", unsafe_allow_html=True)
-    st.markdown("Control de Producción Diaria (Inventario) y Salidas de Fruta de Tercera")
+    st.markdown("Control de Producción Diaria (Inventario) y Despachos de Fruta de Tercera")
 
     df_of, _ = get_df_safe("Orden_Fincas")
 
@@ -1637,7 +1702,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
 
     tab_prod, tab_tercera, tab_cons = st.tabs([
         "📦 REGISTRAR PRODUCCIÓN (PRIMERA, SEGUNDA, DEDO SUELTO)", 
-        "🚚 DESPACHO FRUTA DE TERCERA (SIN ORDEN)", 
+        "🚚 GESTIÓN Y DESPACHO FRUTA DE TERCERA", 
         "📊 HISTORIAL GENERAL EN PLANTA"
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1702,61 +1767,55 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 st.error(f"Error al guardar la producción: {e}")
 
     with tab_tercera:
-        st.markdown("<h3 style='color: #007bff;'>REGISTRO DE DESPACHO - FRUTA DE TERCERA (SIN ORDEN DE CARGA)</h3>", unsafe_allow_html=True)
-        st.caption("💡 Este módulo registra salidas de fruta de tercera de manera independiente, sin requerir orden de carga, detallando chofer, cliente y rejas de plástico.")
+        st.markdown("<h3 style='color: #007bff;'>GESTIÓN Y CIERRE DE DESPACHO - FRUTA DE TERCERA</h3>", unsafe_allow_html=True)
+        st.caption("💡 Complete los datos de rejas plásticas y cantidad despachada para los vehículos que ingresaron desde caseta, y registre la salida final.")
 
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            fecha_despacho_tercera = st.date_input("Fecha de Despacho", value=datetime.now().date(), key="tercera_fecha")
-            num_despacho = st.text_input("Número de Despacho / Folio", placeholder="Ej. DESP-001", key="tercera_num_despacho")
-            cliente_tercera = st.text_input("Cliente", placeholder="Nombre del cliente", key="tercera_cliente")
-        with col_t2:
-            datos_chofer = st.text_input("Datos del Chofer (Nombre / Placas)", placeholder="Nombre y vehículo", key="tercera_chofer")
-            num_rejas_plastico = st.number_input("Número de Rejas de Plástico", min_value=0, value=0, step=1, key="tercera_rejas")
-            cantidad_tercera = st.number_input("Cantidad / Unidades de Tercera", min_value=0.0, value=0.0, step=1.0, key="tercera_cantidad")
+        df_terc_act, _ = get_df_safe("Despachos_Tercera")
+        if not df_terc_act.empty:
+            df_terc_pend = df_terc_act[df_terc_act['estado_despacho'].astype(str).str.upper() == 'EN_PLANTA']
+            if not df_terc_pend.empty:
+                st.dataframe(df_terc_pend[['id_despacho_tercera', 'fecha_ingreso', 'chofer', 'placas', 'cliente', 'hora_ingreso']], use_container_width=True)
+                
+                selected_dt = st.selectbox("Seleccione el ID de Despacho de Tercera a Completar", df_terc_pend['id_despacho_tercera'].tolist(), key="select_dt_planta")
+                
+                col_dt1, col_dt2 = st.columns(2)
+                with col_dt1:
+                    num_rejas_plastico = st.number_input("Número de Rejas de Plástico", min_value=0, value=0, step=1, key="planta_rejas_tercera")
+                    cantidad_tercera = st.number_input("Cantidad de Tercera Despachada", min_value=0.0, value=0.0, step=1.0, key="planta_cant_tercera")
+                with col_dt2:
+                    cliente_final = st.text_input("Cliente Confirmado", key="planta_cliente_tercera")
+                    obs_planta_tercera = st.text_area("Observaciones del Jefe de Planta", key="planta_obs_tercera")
 
-        obs_tercera = st.text_area("Observaciones de Despacho de Tercera", placeholder="Notas adicionales...", key="tercera_obs")
+                st.markdown("📷 **Evidencia Fotográfica de Salida (Cierre de Unidad)**")
+                foto_salida_tercera = st.camera_input("Foto Salida del Vehículo", key="planta_foto_salida_tercera")
 
-        if st.button("✅ GUARDAR DESPACHO DE TERCERA", type="primary", use_container_width=True, key="btn_guardar_tercera"):
-            try:
-                _, sh, _ = get_db()
-                nombres_hojas = [w.title for w in sh.worksheets()]
-                if "Despachos_Tercera" in nombres_hojas:
-                    ws_t = sh.worksheet("Despachos_Tercera")
-                else:
-                    ws_t = sh.add_worksheet(title="Despachos_Tercera", rows=1000, cols=20)
-
-                if not ws_t.get_all_values():
-                    ws_t.append_row([
-                        "id_despacho_tercera", "fecha_despacho", "id_finca", "num_despacho", 
-                        "cliente", "datos_chofer", "num_rejas_plastico", "cantidad_tercera", 
-                        "observaciones", "fecha_registro", "id_usuario"
-                    ])
-
-                id_reg_t = f"TERC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                dict_reg_t = {
-                    "id_despacho_tercera": id_reg_t,
-                    "fecha_despacho": str(fecha_despacho_tercera),
-                    "id_finca": str(finca_actual),
-                    "num_despacho": str(num_despacho),
-                    "cliente": str(cliente_tercera),
-                    "datos_chofer": str(datos_chofer),
-                    "num_rejas_plastico": str(num_rejas_plastico),
-                    "cantidad_tercera": str(cantidad_tercera),
-                    "observaciones": str(obs_tercera),
-                    "fecha_registro": str(hora_dispositivo),
-                    "id_usuario": str(st.session_state.get("username", "jefe_planta"))
-                }
-
-                ensure_columns_exist(ws_t, list(dict_reg_t.keys()))
-                append_row_dict_safe(ws_t, dict_reg_t)
-
-                st.cache_data.clear()
-                st.success(f"✅ ¡Despacho de fruta de tercera registrado correctamente!")
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error al guardar despacho de tercera: {e}")
+                if st.button("✅ CERRAR Y REGISTRAR SALIDA DE DESPACHO DE TERCERA", type="primary", use_container_width=True, key="btn_cerrar_tercera"):
+                    try:
+                        _, sh_dt, _ = get_db()
+                        ws_dt = sh_dt.worksheet("Despachos_Tercera")
+                        cell = ws_dt.find(str(selected_dt))
+                        if cell:
+                            r_idx = cell.row
+                            hora_salida_val = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            # Actualizar campos clave en Google Sheets
+                            ws_dt.update_cell(r_idx, ws_dt.find("estado_despacho").col, "COMPLETADO")
+                            ensure_columns_exist(ws_dt, ["num_rejas_plastico", "cantidad_tercera", "hora_salida"])
+                            ws_dt.update_cell(r_idx, ws_dt.find("num_rejas_plastico").col, str(num_rejas_plastico))
+                            ws_dt.update_cell(r_idx, ws_dt.find("cantidad_tercera").col, str(cantidad_tercera))
+                            ws_dt.update_cell(r_idx, ws_dt.find("hora_salida").col, str(hora_salida_val))
+                            
+                            st.success(f"✅ ¡Despacho de tercera {selected_dt} completado y cerrado con éxito!")
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.error("No se encontró el registro seleccionado.")
+                    except Exception as e:
+                        st.error(f"Error al cerrar despacho: {e}")
+            else:
+                st.info("No hay vehículos de fruta de tercera en planta pendientes de cierre.")
+        else:
+            st.info("No hay registros de ingresos de fruta de tercera en el sistema.")
 
     with tab_cons:
         st.markdown("<h3 style='color: #007bff;'>HISTORIAL GENERAL EN PLANTA</h3>", unsafe_allow_html=True)
@@ -1770,7 +1829,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             st.info("No hay registros de producción previos.")
 
         st.markdown("---")
-        st.markdown("#### 🚚 Despachos de Fruta de Tercera (Sin Orden)")
+        st.markdown("#### 🚚 Despachos e Historial de Fruta de Tercera")
         df_terc_hist, _ = get_df_safe("Despachos_Tercera")
         if not df_terc_hist.empty:
             df_terc_finca = df_terc_hist if finca_actual.upper() == "TODAS" else df_terc_hist[df_terc_hist['id_finca'].astype(str).str.upper() == finca_actual.upper()]
