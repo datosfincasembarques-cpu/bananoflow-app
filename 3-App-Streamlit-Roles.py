@@ -1739,13 +1739,14 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Cargar opciones dinámicamente desde la base de datos (con respaldos)
+    # Cargar opciones de Clientes combinando Código + Nombre para que el usuario no adivine
     df_cli_db, _ = get_df_safe("Clientes")
     if not df_cli_db.empty:
-        col_cli = next((c for c in df_cli_db.columns if 'nombre' in c.lower() or 'cliente' in c.lower()), df_cli_db.columns[0])
-        clientes_opciones = df_cli_db[col_cli].dropna().astype(str).unique().tolist()
+        col_id_cli = next((c for c in df_cli_db.columns if 'id' in c.lower() or 'codigo' in c.lower() or 'clik' in c.lower()), df_cli_db.columns[0])
+        col_nom_cli = next((c for c in df_cli_db.columns if 'nombre' in c.lower() or 'cliente' in c.lower() or 'razon' in c.lower() or 'desc' in c.lower()), df_cli_db.columns[-1])
+        clientes_opciones = [f"{row[col_id_cli]} - {row[col_nom_cli]}" if col_id_cli != col_nom_cli else str(row[col_nom_cli]) for _, row in df_cli_db.iterrows()]
     else:
-        clientes_opciones = ["General / Inventario", "Cliente Local"]
+        clientes_opciones = ["C001 - General / Inventario", "C002 - Cliente Local"]
 
     df_cal_db, _ = get_df_safe("Calidades")
     if df_cal_db.empty:
@@ -1788,7 +1789,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 "calidad": st.column_config.SelectboxColumn("Calidad", options=calidades_opciones, required=True),
                 "carton": st.column_config.SelectboxColumn("Tipo de Cartón", options=cartones_opciones, required=True),
                 "cliente": st.column_config.SelectboxColumn("Cliente", options=clientes_opciones, required=True),
-                "peso_unitario": st.column_config.NumberColumn("Peso Unit. (kg) [18.86 / 22 / 26]", min_value=0.0, step=0.01, format="%.2f")
+                "peso_unitario": st.column_config.NumberColumn("Peso (kg)", min_value=0.0, step=0.01, format="%.2f")
             },
             key="editor_produccion_tabular"
         )
@@ -1881,7 +1882,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             st.markdown("#### 📦 Empaque y Cantidad")
             tipo_empaque = st.selectbox("Tipo de Empaque", options=["REJA DE PLÁSTICO"], index=0, key="terc_loc_empaque")
             cantidad_rejas = st.number_input("Cantidad", min_value=0.0, value=0.0, step=1.0, key="terc_loc_cantidad")
-            peso_unitario_reja = st.number_input("Peso Unitario (kg) [Predeterminado 26]", value=26.0, step=0.1, key="terc_loc_peso_unit")
+            peso_unitario_reja = st.number_input("Peso (kg) [Predeterminado 26]", value=26.0, step=0.1, key="terc_loc_peso_unit")
 
         with col_dt_2:
             st.markdown("#### 🚛 Datos del Vehículo / Transporte")
