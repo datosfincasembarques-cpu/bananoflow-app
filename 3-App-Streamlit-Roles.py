@@ -616,7 +616,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 except Exception as e:
                     st.error(f"Error al procesar la orden: {e}")
 
-    # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------
     # 6.2 Submódulo: 📦 Órdenes Expedidas
     # --------------------------------------------------------------------------
     if "Órdenes Expedidas" in menu_sel or menu_sel == "Órdenes Expedidas":
@@ -678,7 +678,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 else:
                     st.dataframe(df_filtrado, use_container_width=True)
 
-                    # Detalle individual de orden
+                    # Detalle individual de orden en tarjeta limpia y profesional (Reemplazo total de st.json)
                     st.markdown("#### 🔍 Detalle Individual de Orden")
                     ids_disponibles = df_filtrado['id_orden'].astype(str).tolist() if 'id_orden' in df_filtrado.columns else []
                     
@@ -687,7 +687,29 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         fila_det = df_filtrado[df_filtrado['id_orden'].astype(str) == str(id_detalles)]
                         
                         if not fila_det.empty:
-                            st.json(fila_det.iloc[0].to_dict())
+                            d_reg = fila_det.iloc[0].to_dict()
+                            
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; font-family: Arial, sans-serif !important;">
+                                    <h4 style="color: #2c3e50; margin-top: 0; font-family: Arial, sans-serif;">📄 Orden de Carga: <b>{d_reg.get('id_orden', '')}</b></h4>
+                                    <hr style="margin: 10px 0; border: 0; border-top: 1px solid #ccc;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: Arial, sans-serif; font-size: 14px;">
+                                        <p style="margin: 4px 0;"><b>📅 Fecha Creación:</b> {d_reg.get('fecha_creacion', '')}</p>
+                                        <p style="margin: 4px 0;"><b>📌 Estado:</b> {d_reg.get('estado', 'ACTIVA')}</p>
+                                        <p style="margin: 4px 0;"><b>👤 Usuario Crea:</b> {d_reg.get('id_usuario_crea', '')}</p>
+                                        <p style="margin: 4px 0;"><b>🚜 Operador / Tractor:</b> {d_reg.get('id_operador', '')} / {d_reg.get('id_tractor', '')}</p>
+                                        <p style="margin: 4px 0;"><b>📦 Cajas:</b> {d_reg.get('id_caja1', '')} | {d_reg.get('id_caja2', '')}</p>
+                                        <p style="margin: 4px 0;"><b>🏢 Cliente:</b> {d_reg.get('cliente', d_reg.get('id_cliente', ''))}</p>
+                                        <p style="margin: 4px 0;"><b>📍 Destino:</b> {d_reg.get('id_destino', '')}</p>
+                                        <p style="margin: 4px 0;"><b>🏷️ Lote (AAPS):</b> {d_reg.get('id_lote', 'Pendiente')}</p>
+                                        <p style="margin: 4px 0;"><b>📄 Remisión:</b> {d_reg.get('folio_remision', 'Pendiente')}</p>
+                                        <p style="margin: 4px 0;"><b>🧾 Factura:</b> {d_reg.get('folio_factura', 'Pendiente')}</p>
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
     
 # --------------------------------------------------------------------------
     # 6.3 Submódulo: 📜 Compra y Guías
