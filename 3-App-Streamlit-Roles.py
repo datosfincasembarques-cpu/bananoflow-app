@@ -1536,16 +1536,125 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.metric(label="📌 Estatus", value=filtro_seg_estado)
                             
 # ==========================================
-# CÓDIGO 7: MÓDULOS OPERATIVOS ADICIONALES (VIGILANCIA, ESTIBA Y PLANTA)
+# CÓDIGO 7: MÓDULOS OPERATIVOS CON SOPORTE OFFLINE (EXCEL PUENTE)
 # ==========================================
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import time
+import os
+import openpyxl
 
+# Archivo Excel local utilizado como puente cuando no hay internet
+EXCEL_RESPALDO = "respaldo_pendientes_finca.xlsx"
+
+def guardar_con_respaldo_offline(sheet_name, dict_data):
+    """
+    Intenta guardar en Google Sheets. Si falla (sin internet), 
+    guarda el registro en un archivo Excel local de respaldo.
+    """
+    try:
+        # Intento de conexión a Google Sheets
+        _, sh, _ = get_db()
+        nombres_h = [w.title for w in sh.worksheets()]
+        if sheet_name in nombres_h:
+            ws = sh.worksheet(sheet_name)
+        else:
+            ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=20)
+            
+        ensure_columns_exist(ws, list(dict_data.keys()))
+        append_row_dict_safe(ws, dict_data)
+        return True, "Guardado exitosamente en la Nube (Google Sheets)."
+        
+    except Exception as e:
+        # Si ocurre un error de red o timeout, respaldamos en Excel local
+        try:
+            df_nuevo = pd.DataFrame([dict_data])
+            df_nuevo["sheet_destino"] = sheet_name # Guardamos a qué hoja pertenece
+            
+            if os.path.exists(EXCEL_RESPALDO):
+                df_existente = pd.read_excel(EXCEL_RESPALDO)
+                df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
+            else:
+                df_final = df_nuevo
+                
+            df_final.to_excel(EXCEL_RESPALDO, index=False)
+            return False, "⚠️ Sin internet: Guardado de emergencia en Excel local. Se sincronizará al recuperar señal."
+        except Exception as ex_excel:
+            return False, f"Error crítico al respaldar localmente: {ex_excel}"
+
+def sincronizar_pendientes_excel():
+    """
+    Lee el Excel local de respaldo y sube todos los registros pendientes a Google Sheets.
+    """
+    if not os.path.exists(EXCEL_RESPALDO):
+        return 0, "No hay datos pendientes de sincronización."
+        
+    try:
+        df_pendientes = pd.read_excel(EXCEL_RESPALDO)
+        if df_pendientes.empty:
+            os.remove(EXCEL_RESPALDO)
+            return 0, "El archivo de respaldo estaba vacío."
+            
+        _, sh, _ = get_db()
+        sincronizados = 0
+        
+        # Agrupamos por hoja de destino
+        for sheet_name, grupo in df_pendientes.groupby("sheet_destino"):
+            if sheet_name not in [w.title for w in sh.worksheets()]:
+                ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=20)
+            else:
+                ws = sh.worksheet(sheet_name)
+                
+            # Quitamos la columna temporal antes de subir a Google Sheets
+            grupo_limpio = grupo.drop(columns=["sheet_destino"], errors="ignore")
+            
+            for _, row in grupo_limpio.iterrows():
+                dict_fila = row.dropna().to_dict()
+                dict_fila = {str(k): str(v) for k, v in dict_fila.items()}
+                
+                ensure_columns_exist(ws, list(dict_fila.keys()))
+                append_row_dict_safe(ws, dict_fila)
+                sincronizados += 1
+                
+        # Si todo salió bien, eliminamos el archivo de respaldo local
+        os.remove(EXCEL_RESPALDO)
+        return sincronizados, f"¡Sincronización exitosa! Se subieron {sincronizados} registros a la nube."
+        
+    except Exception as e:
+        return -1, f"No se pudo sincronizar (¿Sigues sin internet?): {e}"
+
+# --- GESTIÓN DE ROL Y FINCA ---
 rol_actual = str(st.session_state.get("rol", "")).upper()
 finca_actual = str(st.session_state.get("finca_asignada", "TODAS"))
+
+# Panel lateral con el estado de la conexión y botón de sincronización manual
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 🌐 Estado de Conexión y Respaldo")
+    if os.path.exists(EXCEL_RESPALDO):
+        try:
+            df_p = pd.read_excel(EXCEL_RESPALDO)
+            num_pendientes = len(df_p)
+        except:
+            num_pendientes = 0
+            
+        st.warning(f"⚠️ **Modo Offline Activo**\nHay **{num_pendientes}** registros en el Excel puente.")
+        
+        if st.button("🔄 Sincronizar con la Nube", type="primary", use_container_width=True):
+            with st.spinner("Subiendo datos pendientes a Google Sheets..."):
+                count, msg = sincronizar_pendientes_excel()
+                if count > 0:
+                    st.success(msg)
+                    time.sleep(1.5)
+                    st.rerun()
+                elif count == 0:
+                    st.info(msg)
+                else:
+                    st.error(msg)
+    else:
+        st.success("🟢 **Sistema en Línea**\nTodos los registros están sincronizados con la nube.")
 
 # Estilo visual atractivo en tonos verdes (Emerald / Forest Theme)
 st.markdown("""
@@ -1650,43 +1759,27 @@ if rol_actual in ["VIGILANCIA"]:
                 if not chofer_tercera_v or not placas_tercera_v:
                     st.warning("Debe ingresar el nombre del chofer y las placas del vehículo.")
                 else:
-                    try:
-                        _, sh_vt, _ = get_db()
-                        nombres_h = [w.title for w in sh_vt.worksheets()]
-                        if "Despachos_Tercera" in nombres_h:
-                            ws_dt = sh_vt.worksheet("Despachos_Tercera")
-                        else:
-                            ws_dt = sh_vt.add_worksheet(title="Despachos_Tercera", rows=1000, cols=20)
+                    id_dt = f"TERC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    dict_dt = {
+                        "id_despacho_tercera": id_dt,
+                        "fecha_ingreso": datetime.now().strftime("%Y-%m-%d"),
+                        "id_finca": str(finca_actual),
+                        "chofer": str(chofer_tercera_v),
+                        "placas": str(placas_tercera_v),
+                        "cliente": str(cliente_tercera_v),
+                        "hora_ingreso": str(hora_ingreso_val),
+                        "estado_despacho": "EN_PLANTA",
+                        "observaciones_vigilancia": str(obs_vig_tercera),
+                        "id_usuario_vigilancia": str(st.session_state.get("username", "vigilancia"))
+                    }
 
-                        if not ws_dt.get_all_values():
-                            ws_dt.append_row([
-                                "id_despacho_tercera", "fecha_ingreso", "id_finca", "chofer", 
-                                "placas", "cliente", "hora_ingreso", "estado_despacho", 
-                                "observaciones_vigilancia", "id_usuario_vigilancia"
-                            ])
-
-                        id_dt = f"TERC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                        dict_dt = {
-                            "id_despacho_tercera": id_dt,
-                            "fecha_ingreso": datetime.now().strftime("%Y-%m-%d"),
-                            "id_finca": str(finca_actual),
-                            "chofer": str(chofer_tercera_v),
-                            "placas": str(placas_tercera_v),
-                            "cliente": str(cliente_tercera_v),
-                            "hora_ingreso": str(hora_ingreso_val),
-                            "estado_despacho": "EN_PLANTA",
-                            "observaciones_vigilancia": str(obs_vig_tercera),
-                            "id_usuario_vigilancia": str(st.session_state.get("username", "vigilancia"))
-                        }
-
-                        ensure_columns_exist(ws_dt, list(dict_dt.keys()))
-                        append_row_dict_safe(ws_dt, dict_dt)
-
-                        st.success(f"✅ Ingreso de vehículo de tercera registrado con éxito. Folio: {id_dt}")
-                        time.sleep(1.5)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al registrar ingreso en caseta: {e}")
+                    exito, msg = guardar_con_respaldo_offline("Despachos_Tercera", dict_dt)
+                    if exito:
+                        st.success(f"✅ Ingreso de vehículo de tercera registrado en la nube. Folio: {id_dt}")
+                    else:
+                        st.warning(f"⚠️ {msg} Folio: {id_dt}")
+                    time.sleep(1.5)
+                    st.rerun()
 
 elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
     st.markdown(f"<h2 style='color: #28a745;'>❄️ Módulo de Estiba y Preenfriado - {finca_actual}</h2>", unsafe_allow_html=True)
@@ -1705,39 +1798,24 @@ elif rol_actual in ["ESTIBA", "JEFE_CAMARA"]:
         observaciones_estiba = st.text_area("Observaciones de Estiba y Contenedor", key="est_obs")
 
     if st.button("✅ GUARDAR DATOS DE ESTIBA Y SELLADO", type="primary", use_container_width=True, key="btn_guardar_estiba"):
-        try:
-            _, sh_e, _ = get_db()
-            nombres_h = [w.title for w in sh_e.worksheets()]
-            if "Control_Estiba" in nombres_h:
-                ws_es = sh_e.worksheet("Control_Estiba")
-            else:
-                ws_es = sh_e.add_worksheet(title="Control_Estiba", rows=1000, cols=15)
+        dict_estiba = {
+            "id_orden": str(id_orden_estiba),
+            "id_finca": str(finca_actual),
+            "temperatura_pulpa": str(temp_pulpa),
+            "termografo": str(num_termografo),
+            "sello": str(num_sello),
+            "observaciones": str(observaciones_estiba),
+            "fecha_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "usuario": str(st.session_state.get("username", "estiba"))
+        }
 
-            if not ws_es.get_all_values():
-                ws_es.append_row([
-                    "id_orden", "id_finca", "temperatura_pulpa", "termografo", 
-                    "sello", "observaciones", "fecha_registro", "usuario"
-                ])
-
-            dict_estiba = {
-                "id_orden": str(id_orden_estiba),
-                "id_finca": str(finca_actual),
-                "temperatura_pulpa": str(temp_pulpa),
-                "termografo": str(num_termografo),
-                "sello": str(num_sello),
-                "observaciones": str(observaciones_estiba),
-                "fecha_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "usuario": str(st.session_state.get("username", "estiba"))
-            }
-
-            ensure_columns_exist(ws_es, list(dict_estiba.keys()))
-            append_row_dict_safe(ws_es, dict_estiba)
-            
-            st.success("✅ Datos de estiba, sellos y temperatura guardados correctamente.")
-            time.sleep(1.2)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error al guardar estiba: {e}")
+        exito, msg = guardar_con_respaldo_offline("Control_Estiba", dict_estiba)
+        if exito:
+            st.success("✅ Datos de estiba guardados correctamente en la nube.")
+        else:
+            st.warning(f"⚠️ {msg}")
+        time.sleep(1.2)
+        st.rerun()
 
 elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     st.markdown("""
@@ -1758,9 +1836,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     df_cli_db, _ = get_df_safe("Clientes")
     clientes_opciones = []
     if not df_cli_db.empty:
-        # Columna B es el índice 1 (si existe), de lo contrario tomamos la segunda columna disponible o la primera
         col_nombre_b = df_cli_db.columns[1] if len(df_cli_db.columns) > 1 else df_cli_db.columns[0]
-        
         for _, row in df_cli_db.iterrows():
             c_nom = str(row[col_nombre_b]).strip()
             if c_nom and c_nom != 'nan':
@@ -1789,8 +1865,6 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
 
     with tab_prod:
         st.markdown("### 🌿 Captura Tabular de Producción Diaria y Existencias")
-        st.caption("✨ Seleccione la fecha principal y registre la producción. El peso unitario se asigna por defecto (18.86 para cajas, 22 para dedo suelto, 26 para rejas), siendo totalmente editable.")
-
         fecha_captura = st.date_input("📅 Fecha Principal de Producción / Carga", value=datetime.now().date(), key="tab_fecha_principal")
 
         if "rows_captura" not in st.session_state:
@@ -1823,7 +1897,6 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
         st.markdown("### 📊 Existencias y Saldos Calculados (En Vivo)")
         if not edited_df.empty:
             df_resumen = edited_df.groupby(["calidad", "carton"], as_index=False)[["cantidad", "peso_total_kg"]].sum()
-            
             cols_metricas = st.columns(min(len(df_resumen), 4) if not df_resumen.empty else 1)
             for idx, row in df_resumen.iterrows():
                 col_target = cols_metricas[idx % len(cols_metricas)]
@@ -1843,22 +1916,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
 
         if st.button("🚀 GUARDAR Y ACTUALIZAR SALDOS EN INVENTARIO", type="primary", use_container_width=True, key="btn_guardar_tabular"):
             try:
-                _, sh, _ = get_db()
-                nombres_hojas = [w.title for w in sh.worksheets()]
-                if "Produccion_Planta" in nombres_hojas:
-                    ws_p = sh.worksheet("Produccion_Planta")
-                else:
-                    ws_p = sh.add_worksheet(title="Produccion_Planta", rows=1000, cols=20)
-
-                headers_prod = [
-                    "id_produccion", "fecha_produccion", "id_finca", 
-                    "cantidad", "calidad", "carton", "cliente", "peso_unitario", "peso_total_kg",
-                    "fecha_registro", "id_usuario", "estado_proceso"
-                ]
-
-                if not ws_p.get_all_values():
-                    ws_p.append_row(headers_prod)
-
+                todos_exitosos = True
                 for _, row in edited_df.iterrows():
                     id_reg_p = f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}-{int(row.name)}"
                     p_unit = float(row["peso_unitario"])
@@ -1879,11 +1937,16 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                         "id_usuario": str(st.session_state.get("username", "jefe_planta")),
                         "estado_proceso": "REGISTRO_TABULAR"
                     }
-                    ensure_columns_exist(ws_p, list(dict_reg_p.keys()))
-                    append_row_dict_safe(ws_p, dict_reg_p)
+                    
+                    exito, _ = guardar_con_respaldo_offline("Produccion_Planta", dict_reg_p)
+                    if not exito:
+                        todos_exitosos = False
 
                 st.cache_data.clear()
-                st.success(f"🌱 ¡Captura tabular para la fecha {fecha_captura} guardada con éxito y saldos actualizados!")
+                if todos_exitosos:
+                    st.success(f"🌱 ¡Captura tabular para la fecha {fecha_captura} guardada con éxito!")
+                else:
+                    st.warning("⚠️ Sin internet: Los registros se guardaron en el **Excel local de respaldo**.")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
@@ -1891,15 +1954,11 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
 
     with tab_tercera:
         st.markdown("<h3 style='color: #28a745;'>🚚 GESTIÓN Y DESPACHO LOCAL - FRUTA DE TERCERA (SIN ORDEN)</h3>", unsafe_allow_html=True)
-        st.caption("💡 Módulo exclusivo para despacho local donde el Jefe de Planta integra directamente los datos del cliente, operador, vehículo y empaque en reja de plástico.")
-
+        
         col_dt_1, col_dt_2 = st.columns(2)
         with col_dt_1:
             st.markdown("#### 👤 Datos del Cliente y Operador")
             cliente_tercera_local = st.selectbox("Seleccione el Cliente (Razón Social)", options=clientes_opciones, key="terc_loc_cliente")
-            
-            st.info(f"🏷️ **Cliente Destino Seleccionado:**\n\n**{cliente_tercera_local}**")
-
             nombre_operador = st.text_input("Nombre del Operador", key="terc_loc_operador")
             num_licencia = st.text_input("Número de Licencia Operador", key="terc_loc_licencia")
             
@@ -1913,68 +1972,46 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
             marca_carro = st.text_input("Marca del Carro", key="terc_loc_marca")
             modelo_carro = st.text_input("Modelo", key="terc_loc_modelo")
             placas_carro = st.text_input("Placas", key="terc_loc_placas")
-            
             obs_tercera_local = st.text_area("Observaciones del Despacho Local", key="terc_loc_obs")
 
         peso_total_tercera = cantidad_rejas * peso_unitario_reja
-        st.info(f"⚖️ Peso Total Calculado de Tercera: **{peso_total_tercera:,.2f} kg** (Basado en {cantidad_rejas} rejas a {peso_unitario_reja} kg c/u)")
+        st.info(f"⚖️ Peso Total Calculado de Tercera: **{peso_total_tercera:,.2f} kg**")
 
         if st.button("🚨 REGISTRAR Y CERRAR DESPACHO LOCAL DE TERCERA", type="primary", use_container_width=True, key="btn_guardar_tercera_local"):
             if not nombre_operador or not placas_carro or cantidad_rejas <= 0:
                 st.warning("Debe ingresar el nombre del operador, las placas del vehículo y una cantidad válida.")
             else:
-                try:
-                    _, sh_dt, _ = get_db()
-                    nombres_h = [w.title for w in sh_dt.worksheets()]
-                    if "Despachos_Tercera" in nombres_h:
-                        ws_dt = sh_dt.worksheet("Despachos_Tercera")
-                    else:
-                        ws_dt = sh_dt.add_worksheet(title="Despachos_Tercera", rows=1000, cols=25)
+                id_dt = f"TERC-LOC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                dict_dt = {
+                    "id_despacho_tercera": id_dt,
+                    "fecha_ingreso": str(datetime.now().strftime("%Y-%m-%d")),
+                    "id_finca": str(finca_actual),
+                    "cliente": str(cliente_tercera_local),
+                    "nombre_operador": str(nombre_operador),
+                    "numero_licencia": str(num_licencia),
+                    "tipo_empaque": str(tipo_empaque),
+                    "cantidad_rejas": str(cantidad_rejas),
+                    "peso_unitario": str(peso_unitario_reja),
+                    "peso_total_kg": str(peso_total_tercera),
+                    "marca_carro": str(marca_carro),
+                    "modelo_carro": str(modelo_carro),
+                    "placas": str(placas_carro),
+                    "estado_despacho": "COMPLETADO_LOCAL",
+                    "observaciones": str(obs_tercera_local),
+                    "fecha_registro": str(hora_dispositivo),
+                    "id_usuario": str(st.session_state.get("username", "jefe_planta"))
+                }
 
-                    headers_terc = [
-                        "id_despacho_tercera", "fecha_ingreso", "id_finca", "cliente", 
-                        "nombre_operador", "numero_licencia", "tipo_empaque", "cantidad_rejas", 
-                        "peso_unitario", "peso_total_kg", "marca_carro", "modelo_carro", 
-                        "placas", "estado_despacho", "observaciones", "fecha_registro", "id_usuario"
-                    ]
-
-                    if not ws_dt.get_all_values():
-                        ws_dt.append_row(headers_terc)
-
-                    id_dt = f"TERC-LOC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    dict_dt = {
-                        "id_despacho_tercera": id_dt,
-                        "fecha_ingreso": str(datetime.now().strftime("%Y-%m-%d")),
-                        "id_finca": str(finca_actual),
-                        "cliente": str(cliente_tercera_local),
-                        "nombre_operador": str(nombre_operador),
-                        "numero_licencia": str(num_licencia),
-                        "tipo_empaque": str(tipo_empaque),
-                        "cantidad_rejas": str(cantidad_rejas),
-                        "peso_unitario": str(peso_unitario_reja),
-                        "peso_total_kg": str(peso_total_tercera),
-                        "marca_carro": str(marca_carro),
-                        "modelo_carro": str(modelo_carro),
-                        "placas": str(placas_carro),
-                        "estado_despacho": "COMPLETADO_LOCAL",
-                        "observaciones": str(obs_tercera_local),
-                        "fecha_registro": str(hora_dispositivo),
-                        "id_usuario": str(st.session_state.get("username", "jefe_planta"))
-                    }
-
-                    ensure_columns_exist(ws_dt, list(dict_dt.keys()))
-                    append_row_dict_safe(ws_dt, dict_dt)
-
-                    st.success(f"✅ ¡Despacho local de fruta de tercera registrado con éxito! Folio: {id_dt}")
-                    time.sleep(1.5)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al registrar despacho local: {e}")
+                exito, msg = guardar_con_respaldo_offline("Despachos_Tercera", dict_dt)
+                if exito:
+                    st.success(f"✅ ¡Despacho local registrado en la nube con éxito! Folio: {id_dt}")
+                else:
+                    st.warning(f"⚠️ {msg} Folio: {id_dt}")
+                time.sleep(1.5)
+                st.rerun()
 
     with tab_cons:
         st.markdown("<h3 style='color: #28a745;'>📊 HISTORIAL, EDICIÓN Y ELIMINACIÓN (PLANTA)</h3>", unsafe_allow_html=True)
-        st.caption("💡 Aquí puede consultar los registros guardados, así como **editar** o **eliminar** registros de producción por si cometió algún error.")
-
         st.markdown("#### 📦 Producción Registrada (Inventario)")
         df_prod_hist, _ = get_df_safe("Produccion_Planta")
         if not df_prod_hist.empty:
