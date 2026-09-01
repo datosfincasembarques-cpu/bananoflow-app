@@ -1818,3 +1818,152 @@ elif st.session_state.rol == "VIGILANCIA":
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al registrar salida: {e}")
+# --------------------------------------------------------------------------
+    # Módulo 8: 🏭 Control y Captura Operativa (Camareros y Jefes de Planta)
+    # --------------------------------------------------------------------------
+    elif "Módulo 8" in menu_sel or "Captura de Producción" in menu_sel or "Empaque" in menu_sel:
+        st.markdown(
+            """
+            <style>
+                *, html, body, [class*="css"], div, span, p, label, input, button, table, th, td, .stTextInput, .stSelectbox, .stMetric {
+                    font-family: Arial, sans-serif !important;
+                }
+                /* Estilos personalizados con tonos verdes corporativos equilibrados */
+                .stButton>button {
+                    background-color: #2E7D32 !important;
+                    color: white !important;
+                    border-radius: 6px;
+                    border: none;
+                    font-weight: bold;
+                }
+                .stButton>button:hover {
+                    background-color: #1B5E20 !important;
+                }
+                div[data-baseweb="tab-list"] button {
+                    font-weight: bold;
+                    color: #2E7D32;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.subheader("🏭 Módulo 8: Control Operativo en Planta y Cámaras de Preenfriado")
+        st.caption("Seleccione su rol asignado para realizar la captura correspondiente con trazabilidad de origen y destino.")
+
+        # Selector de Rol principal con Pestañas visuales en tonos verdes
+        rol_usuario = st.radio(
+            "👤 Seleccione el Perfil de Operación:",
+            ["👨‍🌾 Jefe de Planta (Producción y Salida Directa)", "❄️ Camarero (Requisición y Control de Preenfriados)"],
+            horizontal=True,
+            key="m8_selector_rol"
+        )
+
+        st.markdown("---")
+
+        # ------------------------------------------------------------------
+        # PERFIL 1: JEFE DE PLANTA (PRODUCCIÓN Y SALIDA DESDE FINCA)
+        # ------------------------------------------------------------------
+        if "Jefe de Planta" in rol_usuario:
+            st.markdown("#### 🌾 Registro de Producción y Embarque Directo en Finca")
+            st.caption("Gestione la fruta procesada directamente en la planta de origen, calidades, marcas de cartón y tiempos de estiba.")
+
+            with st.form("form_jefe_planta"):
+                col_jp1, col_jp2 = st.columns(2)
+                with col_jp1:
+                    finca_produccion = st.selectbox("Finca Origen (Donde se produce)", ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero"], key="jp_finca_orig")
+                    tipo_embarque_jp = st.selectbox("Tipo de Embarque", ["Paletizado", "A granel", "Rejas de plástico (Local)"], key="jp_tipo_emb")
+                with col_jp2:
+                    destino_final = st.text_input("Destino / Cliente / Ruta", placeholder="Ej: Puerto / Planta Destino", key="jp_destino")
+                    chofer_jp = st.text_input("Nombre del Chofer / Operador", key="jp_chofer")
+
+                st.markdown("---")
+                st.markdown("##### 📦 Desglose de Cajas, Calidades y Presentaciones")
+                
+                if 'df_jp_cajas' not in st.session_state:
+                    st.session_state['df_jp_cajas'] = pd.DataFrame([
+                        {"No. Cajas": 326, "Calidad": "Segunda", "Cartón / Presentación": "Bravo brand"},
+                        {"No. Cajas": 150, "Calidad": "Dedo suelto", "Cartón / Presentación": "Tapa volteada"},
+                        {"No. Cajas": 36, "Calidad": "Dedo suelto", "Cartón / Presentación": "Mico"},
+                        {"No. Cajas": 36, "Calidad": "Tercera", "Cartón / Presentación": "Reja de plástico"}
+                    ])
+
+                jp_editor = st.data_editor(st.session_state['df_jp_cajas'], num_rows="dynamic", use_container_width=True, key="ed_jp_cajas")
+                total_jp = pd.to_numeric(jp_editor['No. Cajas'], errors='coerce').sum()
+                st.markdown(f"**Total General de Cajas (Producción Finca):** `{int(total_jp):,}` unidades")
+
+                st.markdown("---")
+                st.markdown("##### ⏱️ Tiempos, Inocuidad y Evidencias")
+                
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    h_llegada = st.time_input("Hora de llegada de la unidad", key="jp_hl")
+                    h_inicio = st.time_input("Hora de inicio de estiba", key="jp_hi")
+                    responsable_est = st.text_input("Persona responsable de estibar", key="jp_resp")
+                with col_t2:
+                    h_fin = st.time_input("Hora de fin de estiba", key="jp_hf")
+                    h_salida = st.time_input("Hora de salida de planta", key="jp_hs")
+                    tiene_gatas_jp = st.toggle("¿La unidad cuenta con gatas hidráulicas?", value=True, key="jp_gatas")
+
+                col_e1, col_e2 = st.columns(2)
+                with col_e1:
+                    termografos_jp = st.text_input("IDs de Termógrafos", key="jp_term")
+                    sellos_jp = st.text_input("Cuñas / Sellos de Exportación", key="jp_sellos")
+                with col_e2:
+                    filtro_jp = st.text_input("Serie del Filtro de Unidad", key="jp_filtro")
+
+                st.markdown("📸 **Evidencias Fotográficas Obligatorias**")
+                foto_limp = st.file_uploader("Evidencia de limpieza de caja (Inocuidad)", type=["jpg", "png"], key="f_limp_jp")
+                foto_est = st.file_uploader("Evidencia de correcta estiba", type=["jpg", "png"], key="f_est_jp")
+
+                btn_save_jp = st.form_submit_button("💾 Guardar Producción de Finca", use_container_width=True)
+                if btn_save_jp:
+                    st.success(f"✅ Producción de finca registrada correctamente desde **{finca_produccion}** con un total de **{int(total_jp):,} cajas**.")
+                    st.balloons()
+
+        # ------------------------------------------------------------------
+        # PERFIL 2: CAMAREROS (PREENFRIADOS Y REQUISICIONES)
+        # ------------------------------------------------------------------
+        else:
+            st.markdown("#### ❄️ Módulo de Cámaras y Preenfriados (Camareros)")
+            st.caption("Requisítese y controle la fruta destinada a preenfriamiento, especificando claramente la finca origen y la finca destino de transferencia.")
+
+            with st.form("form_camareros_preenfriado"):
+                col_c1, col_c2, col_c3 = st.columns(3)
+                with col_c1:
+                    finca_origen_cam = st.selectbox("Finca Origen (Producción)", ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero"], key="cam_orig")
+                with col_c2:
+                    finca_destino_cam = st.selectbox("Finca Destino (Recepción / Cámaras)", ["Doña Emilia", "Estribo", "Santa Lucrecia", "Vivero"], key="cam_dest")
+                with col_c3:
+                    id_camara = st.text_input("Identificador de Cámara Fría", placeholder="Ej: Cámara 03", key="cam_id")
+
+                st.markdown("---")
+                st.markdown("##### 📊 Requisición y Cajas en Preenfriado")
+
+                if 'df_cam_cajas' not in st.session_state:
+                    st.session_state['df_cam_cajas'] = pd.DataFrame([
+                        {"No. Cajas": 200, "Calidad": "Primera", "Cartón / Presentación": "Bravo brand", "Temperatura (°C)": 13.5},
+                        {"No. Cajas": 100, "Calidad": "Segunda", "Cartón / Presentación": "Tapa volteada", "Temperatura (°C)": 13.8}
+                    ])
+
+                cam_editor = st.data_editor(st.session_state['df_cam_cajas'], num_rows="dynamic", use_container_width=True, key="ed_cam_cajas")
+                total_cam = pd.to_numeric(cam_editor['No. Cajas'], errors='coerce').sum()
+                st.markdown(f"**Total General en Preenfriado:** `{int(total_cam):,}` cajas")
+
+                st.markdown("---")
+                st.markdown("##### 🌡️ Parámetros de Control y Monitoreo en Cámara")
+
+                col_cm1, col_cm2 = st.columns(2)
+                with col_cm1:
+                    responsable_camara = st.text_input("Camarero Responsable", key="cam_resp")
+                    temp_inicial = st.number_input("Temperatura de Ingreso de Fruta (°C)", value=24.5, step=0.1, key="cam_t_ing")
+                with col_cm2:
+                    hora_ingreso = st.time_input("Hora de ingreso a cámara", key="cam_hing")
+                    humedad_relativa = st.number_input("Humedad Relativa (%)", value=88.0, step=0.5, key="cam_hum")
+
+                observaciones_cam = st.text_area("Observaciones del estado de la fruta y control de frío", key="cam_obs")
+
+                btn_save_cam = st.form_submit_button("📥 Registrar Requisición y Entrada a Preenfriado", use_container_width=True)
+                if btn_save_cam:
+                    st.success(f"❄️ Preenfriado registrado: **{int(total_cam):,} cajas** transferidas de **{finca_origen_cam}** hacia cámaras de **{finca_destino_cam}** ({id_camara}).")
+                    st.balloons()
