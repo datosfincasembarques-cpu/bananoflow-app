@@ -271,7 +271,6 @@ def lista_placas_no_concat(df):
         mapa[idv] = r.to_dict()
     return sorted(lista), mapa
 
-
 # ==============================================================================
 # 6. CUERPO PRINCIPAL - ROL: OFICINA CENTRAL
 # ==============================================================================
@@ -646,12 +645,12 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 c_g1, c_g2 = st.columns(2)
                 with c_g1:
                     # Emisor institucional fijo (Asociación Agrícola - AAPS) independiente del catálogo interno de empresas
-                    st.text_input("Emisor / Proveedor", value="Asociación Agrícola Local de Productores de Banano (AAPS)", disabled=True, key="lbl_emisor_aaps")
+                    st.text_input("Emisor / Proveedor Oficial", value="Asociación Agrícola Local de Productores de Banano (AAPS)", disabled=True, key="lbl_emisor_aaps")
                     folio_aaps = st.text_input("Folio o Referencia de Compra AAPS", placeholder="Ej: AAPS-2026-8901")
                     
                 with c_g2:
                     fecha_compra = st.date_input("Fecha de Adquisición", value=datetime.now())
-                    # Empresa del grupo corporativo que realiza y patrocina la adquisición ante la AAPS
+                    # Empresa del grupo corporativo seleccionada en el panel superior que patrocina la adquisición
                     st.text_input("Empresa Adquiriente (Grupo)", value=emp_nombre_principal, disabled=True, key="lbl_emp_compra")
 
                 st.markdown("---")
@@ -732,7 +731,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                             append_row_dict_safe(ws_stock, row_f_stock)
                                             total_folios_generados += 1
 
-                                st.success(f"✅ ¡Lote **{id_compra_gen}** registrado con éxito ante la AAPS! Se generaron **{total_folios_generados} folios** individuales disponibles.")
+                                st.success(f"✅ ¡Lote **{id_compra_gen}** registrado con éxito ante la AAPS para **{emp_nombre_principal}**! Se generaron **{total_folios_generados} folios** individuales.")
                                 st.balloons()
                         except Exception as e:
                             st.error(f"Error al registrar la compra de guías: {e}")
@@ -745,7 +744,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             if df_compras.empty:
                 st.info("ℹ️ No hay lotes de compras de guías registrados en el sistema.")
             else:
-                # Filtrar por empresa principal
+                # Filtrar por empresa principal del grupo
                 df_c_emp = df_compras[df_compras['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras.columns else df_compras
                 
                 if df_c_emp.empty:
@@ -773,7 +772,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.dataframe(df_stock_lote[['id_stock', 'tipo_documento', 'folio', 'estado', 'id_orden_asignada']], use_container_width=True)
                     else:
                         st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
-    
+                        
     # --------------------------------------------------------------------------
     # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
     # --------------------------------------------------------------------------
