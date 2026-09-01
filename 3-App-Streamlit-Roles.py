@@ -711,162 +711,200 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 unsafe_allow_html=True
                             )
     
-# --------------------------------------------------------------------------
-    # 6.3 Submódulo: 📜 Compra y Guías
-    # --------------------------------------------------------------------------
-    if menu_sel == "📜 Compra y Guías":
-        # Inyección de estilo global para forzar la tipografía Arial en todo el submódulo
-        st.markdown(
-            """
-            <style>
-                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stToggle {
-                    font-family: Arial, sans-serif !important;
-                }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
+# ==========================================
+# 6.3 Submódulo: 📜 Compra y Guías (AAPS)
+# ==========================================
+if menu_sel == "📜 Compra y Guías":
+    # Inyección de estilo global para forzar la tipografía Arial en todo el submódulo
+    st.markdown(
+        """
+        <style>
+            div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stToggle {
+                font-family: Arial, sans-serif !important;
+            }
+            .verde-banner {
+                background: linear-gradient(135deg, #134e2b 0%, #28a745 100%);
+                padding: 20px;
+                border-radius: 12px;
+                color: white;
+                text-align: center;
+                margin-bottom: 25px;
+                box-shadow: 0 6px 12px rgba(40, 167, 69, 0.15);
+            }
+            .verde-banner h2 {
+                color: white !important;
+                margin-bottom: 5px;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-        st.subheader("📜 Módulo de Compra y Gestión de Guías Fitosanitarias (AAPS)")
-        st.caption("Registro de lotes de guías adquiridos ante la Asociación Agrícola Local de Productores de Banano (AAPS) y control de folios disponibles.")
+    st.markdown("""
+        <div class="verde-banner">
+            <h2>📜 Módulo de Compra y Gestión de Guías Fitosanitarias (AAPS)</h2>
+            <p>Registro de lotes de guías adquiridos ante la Asociación Agrícola Local de Productores de Banano y control de folios disponibles</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-        tab_compra1, tab_compra2 = st.tabs(["➕ Registrar Compra de Lote", "📊 Inventario y Stock de Folios"])
+    # Variables de respaldo corporativo si no están definidas en la sesión principal
+    emp_nombre_principal = st.session_state.get("empresa_nombre", "Corporativo Bananero Stivalet")
+    id_emp_principal = st.session_state.get("empresa_id", "EMP-01")
 
-        with tab_compra1:
-            st.markdown("### Registro de Nuevo Lote de Guías AAPS")
+    tab_compra1, tab_compra2 = st.tabs(["➕ Registrar Compra de Lote", "📊 Inventario y Stock de Folios"])
+
+    with tab_compra1:
+        st.markdown("### 📥 Registro de Nuevo Lote de Guías AAPS")
+        st.caption("Complete los datos de la factura o comprobante de compra y los rangos numéricos entregados por la AAPS.")
+        
+        with st.form("form_compra_guias"):
+            c_g1, c_g2 = st.columns(2)
+            with c_g1:
+                # Emisor institucional fijo (Asociación Agrícola - AAPS)
+                st.text_input("Emisor / Proveedor Oficial", value="Asociación Agrícola Local de Productores de Banano (AAPS)", disabled=True, key="lbl_emisor_aaps")
+                folio_aaps = st.text_input("Folio o Referencia de Compra AAPS", placeholder="Ej: AAPS-2026-8901")
+                
+            with c_g2:
+                fecha_compra = st.date_input("Fecha de Adquisición", value=datetime.now())
+                # Empresa del grupo corporativo que patrocina la adquisición
+                st.text_input("Empresa Adquiriente (Grupo)", value=emp_nombre_principal, disabled=True, key="lbl_emp_compra")
+
+            st.markdown("---")
+            st.markdown("#### 🔢 Rango y Estructura de Folios por Documento Oficial")
+            st.caption("Ingrese el rango numérico (inicio y fin) proporcionado por la AAPS para cada formato requerido.")
+
+            docs_config = [
+                ("Certificado de Origen", "cert_ini", "cert_fin"),
+                ("Constancia de Origen", "orig_ini", "orig_fin"),
+                ("Constancia de Clorinacion", "clor_ini", "clor_fin"),
+                ("Carta Responsiva", "resp_ini", "resp_fin")
+            ]
+
+            rangos_capturados = {}
+            for doc_nombre, key_ini, key_fin in docs_config:
+                st.markdown(f"**📄 {doc_nombre}**")
+                rc1, rc2 = st.columns(2)
+                with rc1:
+                    val_ini = st.number_input(f"Folio Inicial - {doc_nombre}", min_value=1, value=1, step=1, key=key_ini)
+                with rc2:
+                    val_fin = st.number_input(f"Folio Final - {doc_nombre}", min_value=1, value=100, step=1, key=key_fin)
+                rangos_capturados[doc_nombre] = (val_ini, val_fin)
+
+            obs_compra = st.text_area("Observaciones de la Compra", placeholder="Notas adicionales sobre la adquisición ante la AAPS...")
+
+            btn_guardar_compra = st.form_submit_button("💾 Guardar Lote y Generar Stock de Folios", use_container_width=True)
+
+            if btn_guardar_compra:
+                if not folio_aaps.strip():
+                    st.warning("⚠️ Debe ingresar el Folio o Referencia de Compra AAPS.")
+                else:
+                    try:
+                        _, sh, _ = get_db()
+                        
+                        # 1. Asegurar hojas y columnas en Google Sheets
+                        nombres_hojas = [w.title for w in sh.worksheets()]
+                        
+                        if "Compra_Guias" in nombres_hojas:
+                            ws_comp = sh.worksheet("Compra_Guias")
+                        else:
+                            ws_comp = sh.add_worksheet(title="Compra_Guias", rows=1000, cols=15)
+                            
+                        if "Guias_Folios_Stock" in nombres_hojas:
+                            ws_stock = sh.worksheet("Guias_Folios_Stock")
+                        else:
+                            ws_stock = sh.add_worksheet(title="Guias_Folios_Stock", rows=2000, cols=10)
+
+                        ensure_columns_exist(ws_comp, [
+                            "id_compra", "id_empresa", "emisor", "folio_compra_AAPS", 
+                            "fecha_compra", "observaciones", "estado", "usuario_registra"
+                        ])
+
+                        ensure_columns_exist(ws_stock, [
+                            "id_stock", "id_compra", "id_empresa", "tipo_documento", 
+                            "folio", "estado", "id_orden_asignada"
+                        ])
+
+                        # Generar ID de compra consecutivo
+                        all_compras = ws_comp.get_all_records()
+                        id_compra_gen = f"CG-{datetime.now().strftime('%Y%m%d')}-{len(all_compras)+1:04d}"
+
+                        row_compra = {
+                            "id_compra": id_compra_gen,
+                            "id_empresa": str(id_emp_principal),
+                            "emisor": "Asociación Agrícola Local de Productores de Banano (AAPS)",
+                            "folio_compra_AAPS": folio_aaps.strip(),
+                            "fecha_compra": fecha_compra.isoformat(),
+                            "observaciones": str(obs_compra),
+                            "estado": "ACTIVO",
+                            "usuario_registra": str(st.session_state.get("username", "administracion"))
+                        }
+
+                        if append_row_dict_safe(ws_comp, row_compra):
+                            # Generar folios individuales en stock para cada documento
+                            total_folios_generados = 0
+                            for doc_n, (f_ini, f_fin) in rangos_capturados.items():
+                                if f_fin >= f_ini:
+                                    for f_num in range(int(f_ini), int(f_fin) + 1):
+                                        row_f_stock = {
+                                            "id_stock": f"{id_compra_gen}-{doc_n[:3].upper()}-{f_num}",
+                                            "id_compra": id_compra_gen,
+                                            "id_empresa": str(id_emp_principal),
+                                            "tipo_documento": doc_n,
+                                            "folio": str(f_num),
+                                            "estado": "DISPONIBLE",
+                                            "id_orden_asignada": ""
+                                        }
+                                        append_row_dict_safe(ws_stock, row_f_stock)
+                                        total_folios_generados += 1
+
+                            st.success(f"✅ ¡Lote **{id_compra_gen}** registrado con éxito ante la AAPS para **{emp_nombre_principal}**! Se generaron **{total_folios_generados} folios** individuales.")
+                            st.balloons()
+                            time.sleep(1.5)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al registrar la compra de guías: {e}")
+
+    with tab_compra2:
+        st.markdown("### 📊 Inventario General y Stock de Folios Físicos (AAPS)")
+        
+        df_compras, _ = get_df_safe("Compra_Guias")
+        df_stock, _ = get_df_safe("Guias_Folios_Stock")
+
+        if df_compras.empty:
+            st.info("ℹ️ No hay lotes de compras de guías registrados en el sistema.")
+        else:
+            # Filtrar por empresa principal del grupo
+            df_c_emp = df_compras[df_compras['id_empresa'].astype(str).str.upper() == str(id_emp_principal).upper()] if 'id_empresa' in df_compras.columns else df_compras
             
-            with st.form("form_compra_guias"):
-                c_g1, c_g2 = st.columns(2)
-                with c_g1:
-                    # Emisor institucional fijo (Asociación Agrícola - AAPS) independiente del catálogo interno de empresas
-                    st.text_input("Emisor / Proveedor Oficial", value="Asociación Agrícola Local de Productores de Banano (AAPS)", disabled=True, key="lbl_emisor_aaps")
-                    folio_aaps = st.text_input("Folio o Referencia de Compra AAPS", placeholder="Ej: AAPS-2026-8901")
-                    
-                with c_g2:
-                    fecha_compra = st.date_input("Fecha de Adquisición", value=datetime.now())
-                    # Empresa del grupo corporativo seleccionada en el panel superior que patrocina la adquisición
-                    st.text_input("Empresa Adquiriente (Grupo)", value=emp_nombre_principal, disabled=True, key="lbl_emp_compra")
+            if df_c_emp.empty:
+                st.warning(f"⚠️ No hay lotes registrados para la empresa actual: **{emp_nombre_principal}**.")
+            else:
+                st.dataframe(df_c_emp, use_container_width=True)
 
                 st.markdown("---")
-                st.markdown("#### 🔢 Rango y Estructura de Folios por Documento")
-                st.caption("Ingrese el rango numérico (inicio y fin) proporcionado por la AAPS para cada formato oficial requerido en la guía fitosanitaria.")
-
-                docs_config = [
-                    ("Certificado de Origen", "cert_ini", "cert_fin"),
-                    ("Constancia de Origen", "orig_ini", "orig_fin"),
-                    ("Constancia de Clorinacion", "clor_ini", "clor_fin"),
-                    ("Carta Responsiva", "resp_ini", "resp_fin")
-                ]
-
-                rangos_capturados = {}
-                for doc_nombre, key_ini, key_fin in docs_config:
-                    st.markdown(f"**📄 {doc_nombre}**")
-                    rc1, rc2 = st.columns(2)
-                    with rc1:
-                        val_ini = st.number_input(f"Folio Inicial - {doc_nombre}", min_value=1, value=1, step=1, key=key_ini)
-                    with rc2:
-                        val_fin = st.number_input(f"Folio Final - {doc_nombre}", min_value=1, value=100, step=1, key=key_fin)
-                    rangos_capturados[doc_nombre] = (val_ini, val_fin)
-
-                obs_compra = st.text_area("Observaciones de la Compra", placeholder="Notas adicionales sobre la adquisición ante la AAPS...")
-
-                btn_guardar_compra = st.form_submit_button("💾 Guardar Lote y Generar Stock de Folios", use_container_width=True)
-
-                if btn_guardar_compra:
-                    if not folio_aaps.strip():
-                        st.warning("⚠️ Debe ingresar el Folio o Referencia de Compra AAPS.")
+                st.markdown("#### 🔍 Detalle de Stock por Folio y Lote")
+                if not df_stock.empty:
+                    lote_sel_inv = st.selectbox("Seleccione Lote de Compra para auditoría", df_c_emp['id_compra'].tolist(), key="sel_lote_inventario")
+                    df_stock_lote = df_stock[df_stock['id_compra'].astype(str) == str(lote_sel_inv)]
+                    
+                    if df_stock_lote.empty:
+                        st.info("ℹ️ No hay folios registrados para este lote.")
                     else:
-                        try:
-                            _, sh, _ = get_db()
-                            
-                            # 1. Asegurar hojas y columnas
-                            ws_comp = sh.worksheet("Compra_Guias")
-                            ensure_columns_exist(ws_comp, [
-                                "id_compra", "id_empresa", "emisor", "folio_compra_AAPS", 
-                                "fecha_compra", "observaciones", "estado", "usuario_registra"
-                            ])
+                        col_st1, col_st2, col_st3 = st.columns(3)
+                        total_f = len(df_stock_lote)
+                        disp_f = len(df_stock_lote[df_stock_lote['estado'].astype(str).str.upper() == 'DISPONIBLE'])
+                        asig_f = len(df_stock_lote[df_stock_lote['estado'].astype(str).str.upper() == 'ASIGNADO'])
+                        
+                        with col_st1: 
+                            st.metric("Total Folios", f"{total_f:,.0f}")
+                        with col_st2: 
+                            st.metric("Disponibles", f"{disp_f:,.0f}", delta=f"{disp_f} libres")
+                        with col_st3: 
+                            st.metric("Asignados", f"{asig_f:,.0f}", delta=f"-{asig_f} usados", delta_color="inverse")
 
-                            ws_stock = sh.worksheet("Guias_Folios_Stock")
-                            ensure_columns_exist(ws_stock, [
-                                "id_stock", "id_compra", "id_empresa", "tipo_documento", 
-                                "folio", "estado", "id_orden_asignada"
-                            ])
-
-                            # Generar ID de compra consecutivo
-                            all_compras = ws_comp.get_all_records()
-                            id_compra_gen = f"CG-{datetime.now().strftime('%Y%m%d')}-{len(all_compras)+1:04d}"
-
-                            row_compra = {
-                                "id_compra": id_compra_gen,
-                                "id_empresa": id_emp_principal,
-                                "emisor": "Asociación Agrícola Local de Productores de Banano (AAPS)",
-                                "folio_compra_AAPS": folio_aaps.strip(),
-                                "fecha_compra": fecha_compra.isoformat(),
-                                "observaciones": obs_compra,
-                                "estado": "ACTIVO",
-                                "usuario_registra": st.session_state.username
-                            }
-
-                            if append_row_dict_safe(ws_comp, row_compra):
-                                # Generar folios individuales en stock para cada documento
-                                total_folios_generados = 0
-                                for doc_n, (f_ini, f_fin) in rangos_capturados.items():
-                                    if f_fin >= f_ini:
-                                        for f_num in range(int(f_ini), int(f_fin) + 1):
-                                            row_f_stock = {
-                                                "id_stock": f"{id_compra_gen}-{doc_n[:3].upper()}-{f_num}",
-                                                "id_compra": id_compra_gen,
-                                                "id_empresa": id_emp_principal,
-                                                "tipo_documento": doc_n,
-                                                "folio": str(f_num),
-                                                "estado": "DISPONIBLE",
-                                                "id_orden_asignada": ""
-                                            }
-                                            append_row_dict_safe(ws_stock, row_f_stock)
-                                            total_folios_generados += 1
-
-                                st.success(f"✅ ¡Lote **{id_compra_gen}** registrado con éxito ante la AAPS para **{emp_nombre_principal}**! Se generaron **{total_folios_generados} folios** individuales.")
-                                st.balloons()
-                        except Exception as e:
-                            st.error(f"Error al registrar la compra de guías: {e}")
-
-        with tab_compra2:
-            st.markdown("### Inventario General y Stock de Folios Físicos (AAPS)")
-            df_compras, _ = get_df_safe("Compra_Guias")
-            df_stock, _ = get_df_safe("Guias_Folios_Stock")
-
-            if df_compras.empty:
-                st.info("ℹ️ No hay lotes de compras de guías registrados en el sistema.")
-            else:
-                # Filtrar por empresa principal del grupo
-                df_c_emp = df_compras[df_compras['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras.columns else df_compras
-                
-                if df_c_emp.empty:
-                    st.warning(f"⚠️ No hay lotes registrados para la empresa actual: **{emp_nombre_principal}**.")
+                        st.dataframe(df_stock_lote[['id_stock', 'tipo_documento', 'folio', 'estado', 'id_orden_asignada']], use_container_width=True)
                 else:
-                    st.dataframe(df_c_emp, use_container_width=True)
-
-                    st.markdown("#### 📦 Detalle de Stock por Folio")
-                    if not df_stock.empty:
-                        lote_sel_inv = st.selectbox("Filtrar por Lote de Compra", df_c_emp['id_compra'].tolist(), key="sel_lote_inventario")
-                        df_stock_lote = df_stock[df_stock['id_compra'].astype(str) == str(lote_sel_inv)]
-                        
-                        if df_stock_lote.empty:
-                            st.info("ℹ️ No hay folios registrados para este lote.")
-                        else:
-                            col_st1, col_st2, col_st3 = st.columns(3)
-                            total_f = len(df_stock_lote)
-                            disp_f = len(df_stock_lote[df_stock_lote['estado'].astype(str).str.upper() == 'DISPONIBLE'])
-                            asig_f = len(df_stock_lote[df_stock_lote['estado'].astype(str).str.upper() == 'ASIGNADO'])
-                            
-                            with col_st1: st.metric("Total Folios", total_f)
-                            with col_st2: st.metric("Disponibles", disp_f, delta=f"{disp_f} libres")
-                            with col_st3: st.metric("Asignados", asig_f, delta=f"-{asig_f} usados", delta_color="inverse")
-
-                            st.dataframe(df_stock_lote[['id_stock', 'tipo_documento', 'folio', 'estado', 'id_orden_asignada']], use_container_width=True)
-                    else:
-                        st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
-                        
+                    st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")                        
 # --------------------------------------------------------------------------
     # 6.4 Submódulo: 📄 Remisión/Factura (Con lectura dinámica desde la tabla Clientes)
     # --------------------------------------------------------------------------
