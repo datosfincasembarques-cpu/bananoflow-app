@@ -1397,7 +1397,112 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.dataframe(df_folios, use_container_width=True)
                 st.caption("Control individual de folios para Certificado de Origen, Constancia de Origen, Constancia de Clorinación y Carta Responsiva.")
+    # --------------------------------------------------------------------------
+    # 6.8 Submódulo: 📖 Seguimiento de Carga y Estatus por Finca
+    # --------------------------------------------------------------------------
+    elif "Seguimiento" in menu_sel:
+        st.markdown(
+            """
+            <style>
+                *, html, body, [class*="css"], div, span, p, label, input, button, table, th, td, .stTextInput, .stSelectbox, .stMetric {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.subheader("📖 Seguimiento de Órdenes de Carga y Progreso por Finca")
+        st.caption("Monitoree en tiempo real el estatus de las unidades, el avance de carga y el volumen de cajas por finca.")
+
+        try:
+            db_res = get_db()
+            sh_obj = db_res[1] if isinstance(db_res, tuple) and len(db_res) >= 2 else None
+            hojas_disponibles = [ws.title for ws in sh_obj.worksheets()] if sh_obj else []
+        except Exception as e:
+            hojas_disponibles = []
+            st.error(f"Error al conectar con la base de datos: {e}")
+
+        hoja_encontrada = "OrdenesCarga"
+        for h in hojas_disponibles:
+            if "orden" in h.lower() or "carga" in h.lower() or "seguimiento" in h.lower():
+                hoja_encontrada = h
+                break
+
+        try:
+            df_seguimiento, _ = get_df_safe(hoja_encontrada)
+        except Exception as e:
+            df_seguimiento = pd.DataFrame()
+            st.error(f"Error al cargar los datos de la hoja '{hoja_encontrada}': {e}")
+
+        if df_seguimiento is None or df_seguimiento.empty:
+            st.warning(f"⚠️ No se encontraron registros en la hoja '{hoja_encontrada}' o la tabla está vacía.")
+            if hojas_disponibles:
+                st.info(f"📋 Hojas disponibles en Google Sheets: {', '.join(hojas_disponibles)}")
+        else:
+            st.markdown("---")
+            st.markdown("#### ⚙️ Filtros Operativos de Seguimiento")
+
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                fincas_lista = ["TODOS"] + sorted(df_seguimiento['finca'].dropna().astype(str).unique().tolist()) if 'finca' in df_seguimiento.columns else ["TODOS"]
+                filtro_seg_finca = st.selectbox("Finca / Productor", fincas_lista, key="seg_filtro_finca")
+            with col_s2:
+                estados_seg_lista = ["TODOS"] + sorted(df_seguimiento['estado'].dropna().astype(str).unique().tolist()) if 'estado' in df_seguimiento.columns else ["TODOS", "EXPEDIDA", "ACTIVA", "CARGANDO"]
+                filtro_seg_estado = st.selectbox("Estatus de Carga", estados_seg_lista, key="seg_filtro_estado")
+            with col_s3:
+                buscar_folio = st.text_input("Buscar Folio / Tractor", placeholder="Ej: OC-2026 o OP00012", key="seg_buscar_folio")
+
+            df_filtrado = df_seguimiento.copy()
+            if filtro_seg_finca != "TODOS" and 'finca' in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado['finca'].astype(str).str.upper() == filtro_seg_finca.upper()]
+            if filtro_seg_estado != "TODOS" and 'estado' in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado['estado'].astype(str).str.upper() == filtro_seg_estado.upper()]
+            if buscar_folio.strip():
+                cols_str = [c for c in ['folio_orden', 'id_orden', 'id_tractor', 'id_operador'] if c in df_filtrado.columns]
+                if cols_str:
+                    mask = df_filtrado[cols_str].astype(str).apply(lambda x: x.str.contains(buscar_folio.strip(), case=False, na=False)).any(axis=1)
+                    df_filtrado = df_filtrado[mask]
+
+            st.markdown("---")
+            st.markdown("#### 📊 Indicadores Clave de Carga por Finca (KPIs)")
+
+            total_ordenes_finca = len(df_filtrado)
+            total_cajas_finca = 0
+            if 'total_cajas' in df_filtrado.columns:
+                total_cajas_finca = pd.to_numeric(df_filtrado['total_cajas'], errors='coerce').sum()
+            elif 'cantidad_cajas' in df_filtrado.columns:
+                total_cajas_finca = pd.to_numeric(df_filtrado['cantidad_cajas'], errors='coerce').sum()
+
+            ms1, ms2, ms3, ms4 = st.columns(4)
+            with ms1:
+                st.metric(label="🚛 Órdenes en Proceso", value=total_ordenes_finca)
+            with ms2:
+                st.metric(label="📦 Cajas Acumuladas", value=f"{int(total_cajas_finca):,}" if total_cajas_finca else "N/D")
+            with ms3:
+                st.metric(label="🏢 Finca Seleccionada", value=filtro_seg_finca)
+            with ms4:
+                st.metric(label="📌 Estatus", value=filtro_seg_estado)
+
+            st.markdown("---")
+            st.markdown("#### 📋 Detalle de Unidades y Órdenes de Carga")
+
+            if df_filtrado.empty:
+                st.warning("⚠️ No se encontraron órdenes que coincidan con los filtros seleccionados.")
+            else:
+                st.dataframe(df_filtrado, use_container_width=True)
+
+                st.markdown("##### 📄 Monitoreo Individual de Unidad / Orden")
+                columnas_id = ['id_orden', 'folio_orden']
+                id_col_valida = next((c for c in columnas_id if c in df_filtrado.columns), df_filtrado.columns[0])
                 
+                lista_ids = df_filtrado[id_col_valida].astype(str).tolist()
+                orden_seleccionada = st.selectbox("Seleccione Orden para inspeccionar unidades (tractores/cajas) y destino", lista_ids, key="seg_select_detalle")
+
+                if orden_seleccionada:
+                    df_detalle_orden = df_filtrado[df_filtrado[id_col_valida].astype(str) == orden_seleccionada]
+                    if not df_detalle_orden.empty:
+                        st.json(df_detalle_orden.iloc[0].to_dict())            
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
 # ==============================================================================
