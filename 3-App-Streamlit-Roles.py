@@ -1243,7 +1243,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
                 import io
                 output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df_reporte.to_excel(writer, index=False, sheet_name='Concentrado_Corporativo')
                 excel_data = output.getvalue()
 
@@ -1254,6 +1254,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
+                
     # --------------------------------------------------------------------------
     # 6.7 Submódulo: 📜 Compra y Guías Fitosanitarias (Rangos Individuales)
     # --------------------------------------------------------------------------
