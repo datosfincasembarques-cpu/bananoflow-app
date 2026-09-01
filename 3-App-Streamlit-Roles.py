@@ -1946,7 +1946,7 @@ elif st.session_state.rol == "ESTIBA":
             except Exception as e:
                 st.error(f"Error al liberar estiba: {e}")
 
-elif st.session_state.rol == "PLANTA":
+elif st.session_state.rol in ["PLANTA", "JEFE_PLANTA"]:
     st.markdown(f"<h2 style='color: #007bff;'>🏭 Módulo de Planta (Jefe de Planta) - {st.session_state.finca_asignada}</h2>", unsafe_allow_html=True)
     st.markdown("Control de Producción, Empaque y Órdenes de Carga Abiertas")
 
