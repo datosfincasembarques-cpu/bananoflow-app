@@ -1397,7 +1397,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.dataframe(df_folios, use_container_width=True)
                 st.caption("Control individual de folios para Certificado de Origen, Constancia de Origen, Constancia de Clorinación y Carta Responsiva.")
-   # --------------------------------------------------------------------------
+  # --------------------------------------------------------------------------
     # 6.8 Submódulo: 📖 Seguimiento de Carga y Estatus por Finca
     # --------------------------------------------------------------------------
     elif "Seguimiento" in menu_sel:
@@ -1468,25 +1468,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     df_filtrado = df_filtrado[mask]
 
             st.markdown("---")
-            st.markdown("#### 📊 Indicadores Clave de Carga (KPIs)")
-
-            total_ordenes_finca = len(df_filtrado)
-            col_cajas_valida = next((c for c in ['total_cajas', 'cantidad_cajas', 'cajas'] if c in df_filtrado.columns), None)
-            total_cajas_finca = 0
-            if col_cajas_valida:
-                total_cajas_finca = pd.to_numeric(df_filtrado[col_cajas_valida], errors='coerce').sum()
-
-            ms1, ms2, ms3, ms4 = st.columns(4)
-            with ms1:
-                st.metric(label="🚛 Órdenes en Proceso", value=total_ordenes_finca)
-            with ms2:
-                st.metric(label="📦 Cajas Acumuladas", value=f"{int(total_cajas_finca):,}" if total_cajas_finca else "N/D")
-            with ms3:
-                st.metric(label="🏢 Selección", value=filtro_seg_finca)
-            with ms4:
-                st.metric(label="📌 Estatus", value=filtro_seg_estado)
-
-            st.markdown("---")
             st.markdown("#### 📋 Detalle de Unidades y Órdenes de Carga")
 
             if df_filtrado.empty:
@@ -1519,9 +1500,25 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             st.markdown(f"**Cliente / Finca:** {reg_dict.get('id_cliente', reg_dict.get('finca', 'N/D'))}")
                             st.markdown(f"**Destino:** {reg_dict.get('id_destino', 'N/D')}")
                             st.markdown(f"**Factura:** {reg_dict.get('folio_factura', 'N/D')}")
-                        
-                        with st.expander("Ver estructura completa en JSON"):
-                            st.json(reg_dict)
+
+            st.markdown("---")
+            st.markdown("#### 📊 Indicadores Clave de Carga (KPIs)")
+
+            total_ordenes_finca = len(df_filtrado)
+            col_cajas_valida = next((c for c in ['total_cajas', 'cantidad_cajas', 'cajas'] if c in df_filtrado.columns), None)
+            total_cajas_finca = 0
+            if col_cajas_valida:
+                total_cajas_finca = pd.to_numeric(df_filtrado[col_cajas_valida], errors='coerce').sum()
+
+            ms1, ms2, ms3, ms4 = st.columns(4)
+            with ms1:
+                st.metric(label="🚛 Órdenes en Proceso", value=total_ordenes_finca)
+            with ms2:
+                st.metric(label="📦 Cajas Acumuladas", value=f"{int(total_cajas_finca):,}" if total_cajas_finca else "N/D")
+            with ms3:
+                st.metric(label="🏢 Selección", value=filtro_seg_finca)
+            with ms4:
+                st.metric(label="📌 Estatus", value=filtro_seg_estado)
                             
 # ==============================================================================
 # 7. MÓDULOS OPERATIVOS ADICIONALES (ROLES SECUNDARIOS)
