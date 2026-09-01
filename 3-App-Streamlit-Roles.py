@@ -773,15 +773,18 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     else:
                         st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
                         
-   # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
     # 6.4 Submódulo: 📄 Remisión/Factura
     # --------------------------------------------------------------------------
     if menu_sel == "Remisión/Factura":
-        # Inyección de estilo global para forzar la tipografía Arial en todo el submódulo
+        # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
         st.markdown(
             """
             <style>
-                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton {
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stRadio, div.dataframe {
+                    font-family: Arial, sans-serif !important;
+                }
+                table, th, td {
                     font-family: Arial, sans-serif !important;
                 }
             </style>
@@ -790,89 +793,114 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         )
 
         st.subheader("📄 Gestión y Asignación de Lotes, Remisiones y Facturas")
-        st.caption("Seleccione una orden de carga existente para actualizar o asignar los números de lote, remisión y factura correspondientes.")
+        st.caption("Seleccione una orden pendiente de documentación para asignar o actualizar su número de lote, remisión y factura.")
 
         df_ordenes, _ = get_df_safe("OrdenesCarga")
 
         if df_ordenes.empty:
-            st.info("ℹ️ No hay órdenes de carga registradas en el sistema para asociar documentación.")
+            st.info("ℹ️ No hay órdenes de carga registradas en el sistema.")
         else:
             # Filtrar opcionalmente por empresa actual si la columna existe
-            if 'id_empresa' in df_ordenes.columns:
-                # O si se relacionan por el creador o empresa principal activa
-                pass
+            if 'id_empresa' in df_ordenes.columns and 'id_emp_principal' in locals():
+                df_ordenes = df_ordenes[df_ordenes['id_empresa'].astype(str).str.upper() == str(id_emp_principal).upper()]
 
-            # Mostrar tabla general de órdenes actuales para referencia rápida
-            st.markdown("#### 📋 Listado General de Órdenes de Carga")
-            cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
-            st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)
-
-            st.markdown("---")
-            st.markdown("#### ✍️ Actualización de Documentación por Orden")
-
-            # Selector de la orden a editar
-            ids_ordenes_disponibles = df_ordenes['id_orden'].astype(str).tolist() if 'id_orden' in df_ordenes.columns else []
-            
-            if not ids_ordenes_disponibles:
-                st.warning("⚠️ No se encontraron IDs de orden válidos.")
+            if df_ordenes.empty:
+                st.warning(f"⚠️ No hay órdenes registradas para la empresa actual: **{emp_nombre_principal if 'emp_nombre_principal' in locals() else ''}**.")
             else:
-                orden_sel_act = st.selectbox("Seleccione el ID de la Orden de Carga a Modificar", ids_ordenes_disponibles, key="sel_orden_facturacion")
+                # Asegurar columnas necesarias en el DataFrame para evitar errores
+                for col_necesaria in ['id_lote', 'folio_remision', 'folio_factura']:
+                    if col_necesaria not in df_ordenes.columns:
+                        df_ordenes[col_necesaria] = ""
 
-                # Obtener los datos actuales de la orden seleccionada
-                fila_orden = df_ordenes[df_ordenes['id_orden'].astype(str) == str(orden_sel_act)]
-                
-                if not fila_orden.empty:
-                    datos_ord = fila_orden.iloc[0].to_dict()
+                # Filtrar órdenes pendientes (donde falte al menos un dato clave)
+                mask_pendientes = (
+                    (df_ordenes['id_lote'].astype(str).str.strip().isin(["", "nan", "None"])) |
+                    (df_ordenes['folio_remision'].astype(str).str.strip().isin(["", "nan", "None"])) |
+                    (df_ordenes['folio_factura'].astype(str).str.strip().isin(["", "nan", "None"]))
+                )
+                df_pendientes = df_ordenes[mask_pendientes]
+
+                # Selector de modo de visualización
+                modo_vista = st.radio(
+                    "Filtrar Órdenes para Captura",
+                    ["⚠️ Órdenes Pendientes de Documentación", "📋 Todas las Órdenes Registradas"],
+                    horizontal=True
+                )
+
+                df_trabajo = df_pendientes if "Pendientes" in modo_vista else df_ordenes
+
+                if df_trabajo.empty:
+                    st.success("🎉 ¡Excelente! No hay órdenes pendientes de documentación bajo este filtro.")
+                else:
+                    st.markdown("---")
+                    st.markdown("#### ✍️ Selección y Actualización de Documentación")
+
+                    ids_ordenes = df_trabajo['id_orden'].astype(str).tolist() if 'id_orden' in df_trabajo.columns else []
                     
-                    val_lote_act = str(datos_ord.get('id_lote', '') or datos_ord.get('lote', ''))
-                    val_rem_act = str(datos_ord.get('folio_remision', '') or datos_ord.get('remision', ''))
-                    val_fac_act = str(datos_ord.get('folio_factura', '') or datos_ord.get('factura', ''))
-                    val_fac2_act = str(datos_ord.get('folio_factura2', '') or datos_ord.get('factura2', ''))
+                    if not ids_ordenes:
+                        st.warning("⚠️ No se encontraron IDs de orden válidos en el listado.")
+                    else:
+                        orden_sel_act = st.selectbox("Seleccione la Orden de Carga", ids_ordenes, key="sel_orden_facturacion")
 
-                    with st.form(f"form_act_doc_{orden_sel_act}"):
-                        st.markdown(f"**Editando documentos para la orden:** `{orden_sel_act}`")
+                        # Obtener los datos actuales de la orden seleccionada
+                        fila_orden = df_trabajo[df_trabajo['id_orden'].astype(str) == str(orden_sel_act)]
                         
-                        f_r1, f_r2 = st.columns(2)
-                        with f_r1:
-                            nuevo_lote = st.text_input("Número de Lote", value=val_lote_act, placeholder="Ej: CG-202608300734")
-                            nuevo_rem = st.text_input("Número de Remisión (Folio Remisión)", value=val_rem_act, placeholder="Ej: REM-00123")
-                        with f_r2:
-                            nueva_fac = st.text_input("Número de Factura (Folio Factura)", value=val_fac_act, placeholder="Ej: FAC-00123")
-                            nueva_fac2 = st.text_input("Factura 2 (Opcional - Configuración Full)", value=val_fac2_act, placeholder="Ej: FAC-00124")
+                        if not fila_orden.empty:
+                            datos_ord = fila_orden.iloc[0].to_dict()
+                            
+                            val_lote_act = str(datos_ord.get('id_lote', '') if str(datos_ord.get('id_lote', '')) not in ["nan", "None"] else "")
+                            val_rem_act = str(datos_ord.get('folio_remision', '') if str(datos_ord.get('folio_remision', '')) not in ["nan", "None"] else "")
+                            val_fac_act = str(datos_ord.get('folio_factura', '') if str(datos_ord.get('folio_factura', '')) not in ["nan", "None"] else "")
+                            val_fac2_act = str(datos_ord.get('folio_factura2', '') if str(datos_ord.get('folio_factura2', '')) not in ["nan", "None"] else "")
 
-                        btn_guardar_docs = st.form_submit_button("💾 Guardar y Actualizar Documentación", use_container_width=True)
-
-                        if btn_guardar_docs:
-                            try:
-                                _, sh, _ = get_db()
-                                ws_ord = sh.worksheet("OrdenesCarga")
+                            with st.form(f"form_act_doc_{orden_sel_act}"):
+                                st.markdown(f"**Editando documentos para la orden:** `{orden_sel_act}`")
                                 
-                                # Asegurar columnas necesarias en la hoja
-                                ensure_columns_exist(ws_ord, ["id_orden", "id_lote", "folio_remision", "folio_factura", "folio_factura2"])
+                                f_r1, f_r2 = st.columns(2)
+                                with f_r1:
+                                    nuevo_lote = st.text_input("Número de Lote (Guía AAPS)", value=val_lote_act, placeholder="Ej: CG-20260830-0001")
+                                    nuevo_rem = st.text_input("Número de Remisión", value=val_rem_act, placeholder="Ej: REM-00123")
+                                with f_r2:
+                                    nueva_fac = st.text_input("Número de Factura", value=val_fac_act, placeholder="Ej: FAC-00123")
+                                    nueva_fac2 = st.text_input("Factura 2 (Opcional)", value=val_fac2_act, placeholder="Ej: FAC-00124")
 
-                                cell_id = ws_ord.find(str(orden_sel_act))
-                                if cell_id:
-                                    row_idx = cell_id.row
-                                    
-                                    # Actualizar celdas según los encabezados de columnas
-                                    header_row = ws_ord.row_values(1)
-                                    
-                                    def actualizar_columna(nombre_col, valor_val):
-                                        if nombre_col in header_row:
-                                            col_idx = header_row.index(nombre_col) + 1
-                                            ws_ord.update_cell(row_idx, col_idx, valor_val)
+                                btn_guardar_docs = st.form_submit_button("💾 Guardar y Actualizar Documentación", use_container_width=True)
 
-                                    actualizar_columna("id_lote", nuevo_lote)
-                                    actualizar_columna("folio_remision", nuevo_rem)
-                                    actualizar_columna("folio_factura", nueva_fac)
-                                    actualizar_columna("folio_factura2", nueva_fac2)
+                                if btn_guardar_docs:
+                                    try:
+                                        _, sh, _ = get_db()
+                                        ws_ord = sh.worksheet("OrdenesCarga")
+                                        
+                                        ensure_columns_exist(ws_ord, ["id_orden", "id_lote", "folio_remision", "folio_factura", "folio_factura2"])
 
-                                    st.success(f"✅ ¡Documentación actualizada con éxito para la orden **{orden_sel_act}**!")
-                                    st.balloons()
-                                else:
-                                    st.error("❌ No se pudo localizar la fila de la orden en la base de datos de Google Sheets.")
-                            except Exception as e:
-                                st.error(f"Error al actualizar la documentación: {e}")
+                                        cell_id = ws_ord.find(str(orden_sel_act))
+                                        if cell_id:
+                                            row_idx = cell_id.row
+                                            header_row = ws_ord.row_values(1)
+                                            
+                                            def actualizar_columna(nombre_col, valor_val):
+                                                if nombre_col in header_row:
+                                                    col_idx = header_row.index(nombre_col) + 1
+                                                    ws_ord.update_cell(row_idx, col_idx, valor_val)
+
+                                            actualizar_columna("id_lote", nuevo_lote)
+                                            actualizar_columna("folio_remision", nuevo_rem)
+                                            actualizar_columna("folio_factura", nueva_fac)
+                                            actualizar_columna("folio_factura2", nueva_fac2)
+
+                                            st.success(f"✅ ¡Documentación actualizada con éxito para la orden **{orden_sel_act}**!")
+                                            st.balloons()
+                                        else:
+                                            st.error("❌ No se pudo localizar la fila de la orden en la base de datos de Google Sheets.")
+                                    except Exception as e:
+                                        st.error(f"Error al actualizar la documentación: {e}")
+
+                # Tabla resumen inferior para control visual rápido
+                st.markdown("---")
+                st.markdown("#### 📋 Resumen del Estado de Documentación en Órdenes")
+                cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
+                st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)
+                
 # --------------------------------------------------------------------------
     # 6.5 Submódulo: 🛡️ Módulo de Vigilancia (Entrada y Salida en Caseta)
     # --------------------------------------------------------------------------
