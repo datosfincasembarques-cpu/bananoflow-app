@@ -619,190 +619,160 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
     
 # --------------------------------------------------------------------------
-    # 6.3 Submódulo: ✏️ Remisión/Factura (Por Finca en Ruta)
+    # 6.3 Submódulo: 📜 Compra y Guías
     # --------------------------------------------------------------------------
-    elif menu_sel == "✏️ Remisión/Factura":
-        st.subheader("✏️ Edición de Factura, Remisión y Lotes por Finca")
-        df_oc_edit, _ = get_df_safe("OrdenesCarga")
-        df_of_edit, _ = get_df_safe("Orden_Fincas")
-        
-        if df_oc_edit.empty:
-            st.info("No hay órdenes disponibles para editar.")
-        else:
-            ids = list(reversed(df_oc_edit['id_orden'].astype(str).tolist()))
-            sel_orden = st.selectbox("Seleccione la Orden a Modificar", ids[:100], key="sel_edit_hibrido")
+    if menu_sel == "📜 Compra y Guías":
+        # Inyección de estilo global para forzar la tipografía Arial en todo el submódulo
+        st.markdown(
+            """
+            <style>
+                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stToggle {
+                    font-family: Arial, sans-serif !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.subheader("📜 Módulo de Compra y Gestión de Guías Fitosanitarias (AAPS)")
+        st.caption("Registro de lotes de guías adquiridos ante la Asociación Agrícola Local de Productores de Banano (AAPS) y control de folios disponibles.")
+
+        tab_compra1, tab_compra2 = st.tabs(["➕ Registrar Compra de Lote", "📊 Inventario y Stock de Folios"])
+
+        with tab_compra1:
+            st.markdown("### Registro de Nuevo Lote de Guías AAPS")
             
-            if sel_orden:
-                fila = df_oc_edit[df_oc_edit['id_orden'].astype(str) == str(sel_orden)]
-                if not fila.empty:
-                    r = fila.iloc[0].to_dict()
+            with st.form("form_compra_guias"):
+                c_g1, c_g2 = st.columns(2)
+                with c_g1:
+                    # Emisor institucional fijo (Asociación Agrícola - AAPS) independiente del catálogo interno de empresas
+                    st.text_input("Emisor / Proveedor", value="Asociación Agrícola Local de Productores de Banano (AAPS)", disabled=True, key="lbl_emisor_aaps")
+                    folio_aaps = st.text_input("Folio o Referencia de Compra AAPS", placeholder="Ej: AAPS-2026-8901")
                     
-                    df_op_m, _ = get_df_safe("Operadores")
-                    df_lin_m, _ = get_df_safe("LineasTransporte")
-                    df_tr_m, _ = get_df_safe("Tractos")
-                    df_tr2_m, _ = get_df_safe("Tractocamiones")
-                    df_cj_m, _ = get_df_safe("Cajas")
-                    df_cj2_m, _ = get_df_safe("Cajas_Thermoking")
-                    
-                    df_tr_unif = pd.concat([df_tr_m, df_tr2_m], ignore_index=True) if not df_tr_m.empty and not df_tr2_m.empty else (df_tr_m if not df_tr_m.empty else df_tr2_m)
-                    df_cj_unif = pd.concat([df_cj_m, df_cj2_m], ignore_index=True) if not df_cj_m.empty and not df_cj2_m.empty else (df_cj_m if not df_cj_m.empty else df_cj2_m)
+                with c_g2:
+                    fecha_compra = st.date_input("Fecha de Adquisición", value=datetime.now())
+                    # Empresa del grupo corporativo que realiza y patrocina la adquisición ante la AAPS
+                    st.text_input("Empresa Adquiriente (Grupo)", value=emp_nombre_principal, disabled=True, key="lbl_emp_compra")
 
-                    id_operador_raw = str(r.get('id_operador', r.get('operador', ''))).strip()
-                    id_tractor_raw = str(r.get('id_tractor', r.get('unidad', ''))).strip()
-                    id_linea_raw = str(r.get('id_linea', r.get('linea_transporte', ''))).strip()
-                    id_caja1_raw = str(r.get('id_caja1', r.get('caja', ''))).strip()
+                st.markdown("---")
+                st.markdown("#### 🔢 Rango y Estructura de Folios por Documento")
+                st.caption("Ingrese el rango numérico (inicio y fin) proporcionado por la AAPS para cada formato oficial requerido en la guía fitosanitaria.")
 
-                    # Buscar las fincas asociadas a esta orden en Orden_Fincas o en la orden
-                    fincas_de_orden = []
-                    if not df_of_edit.empty and 'id_orden' in df_of_edit.columns:
-                        match_fincas_ord = df_of_edit[df_of_edit['id_orden'].astype(str).str.strip().str.upper() == str(sel_orden).upper()]
-                        if not match_fincas_ord.empty:
-                            fincas_de_orden = match_fincas_ord['id_finca'].astype(str).tolist()
-                    
-                    if not fincas_de_orden:
-                        fallback_finca = str(r.get('id_finca', r.get('ruta_fincas_ids', 'N/D'))).strip()
-                        fincas_de_orden = [f.strip() for f in fallback_finca.split(',') if f.strip()]
+                docs_config = [
+                    ("Certificado de Origen", "cert_ini", "cert_fin"),
+                    ("Constancia de Origen", "orig_ini", "orig_fin"),
+                    ("Constancia de Clorinacion", "clor_ini", "clor_fin"),
+                    ("Carta Responsiva", "resp_ini", "resp_fin")
+                ]
 
-                    # Mapeo de nombres de fincas para el selector
-                    finca_opciones = {}
-                    for fid in fincas_de_orden:
-                        nombre_f = fid
-                        if not df_fin.empty:
-                            col_id_fin = next((c for c in df_fin.columns if 'id' in c.lower()), df_fin.columns[0])
-                            col_nom_fin = next((c for c in df_fin.columns if 'nombre' in c.lower() or 'razon' in c.lower()), df_fin.columns[1] if len(df_fin.columns) > 1 else col_id_fin)
-                            match_f = df_fin[df_fin[col_id_fin].astype(str).str.strip().str.upper() == fid.upper()]
-                            if not match_f.empty:
-                                nombre_f = str(match_f.iloc[0].get(col_nom_fin, fid))
-                        finca_opciones[nombre_f] = fid
+                rangos_capturados = {}
+                for doc_nombre, key_ini, key_fin in docs_config:
+                    st.markdown(f"**📄 {doc_nombre}**")
+                    rc1, rc2 = st.columns(2)
+                    with rc1:
+                        val_ini = st.number_input(f"Folio Inicial - {doc_nombre}", min_value=1, value=1, step=1, key=key_ini)
+                    with rc2:
+                        val_fin = st.number_input(f"Folio Final - {doc_nombre}", min_value=1, value=100, step=1, key=key_fin)
+                    rangos_capturados[doc_nombre] = (val_ini, val_fin)
 
-                    st.markdown("##### 📍 Seleccione la Finca de la Ruta a Modificar")
-                    finca_sel_nombre = st.selectbox("Finca Participante", list(finca_opciones.keys()), key="sel_finca_ruta_edit")
-                    id_finca_activa = finca_opciones.get(finca_sel_nombre, fincas_de_orden[0] if fincas_de_orden else "")
+                obs_compra = st.text_area("Observaciones de la Compra", placeholder="Notas adicionales sobre la adquisición ante la AAPS...")
 
-                    # Extraer datos específicos de esa finca desde Orden_Fincas si existen
-                    reg_finca_actual = {}
-                    if not df_of_edit.empty:
-                        m_rf = df_of_edit[(df_of_edit['id_orden'].astype(str).str.strip().str.upper() == str(sel_orden).upper()) & 
-                                          (df_of_edit['id_finca'].astype(str).str.strip().str.upper() == str(id_finca_activa).upper())]
-                        if not m_rf.empty:
-                            reg_finca_actual = m_rf.iloc[0].to_dict()
+                btn_guardar_compra = st.form_submit_button("💾 Guardar Lote y Generar Stock de Folios", use_container_width=True)
 
-                    # Resolver descripciones generales de operador, unidad, etc.
-                    nombre_operador = id_operador_raw or "No especificado"
-                    if not df_op_m.empty and id_operador_raw:
-                        for _, row_op in df_op_m.iterrows():
-                            row_str = " ".join([str(val) for val in row_op.values])
-                            if id_operador_raw.upper() in row_str.upper():
-                                posibles_textos = [str(val) for val in row_op.values if len(str(val)) > 5 and not str(val).isdigit() and not str(val).startswith('LIN-') and not str(val).startswith('OP')]
-                                if posibles_textos:
-                                    nombre_operador = posibles_textos[0]
-                                    break
-
-                    nombre_linea = id_linea_raw or "No especificada"
-                    if not df_lin_m.empty and id_linea_raw:
-                        col_id_lin = next((c for c in df_lin_m.columns if 'id' in c.lower()), df_lin_m.columns[0])
-                        col_nom_lin = next((c for c in df_lin_m.columns if 'razon' in c.lower() or 'nombre' in c.lower()), df_lin_m.columns[1] if len(df_lin_m.columns) > 1 else col_id_lin)
-                        match_lin = df_lin_m[df_lin_m[col_id_lin].astype(str).str.strip().str.upper() == id_linea_raw.strip().upper()]
-                        if not match_lin.empty:
-                            nombre_linea = str(match_lin.iloc[0].get(col_nom_lin, id_linea_raw))
-
-                    desc_tractor = id_tractor_raw or "No especificado"
-                    placas_tractor = "No especificada"
-                    if not df_tr_unif.empty and id_tractor_raw:
-                        col_id_tr = next((c for c in df_tr_unif.columns if 'id' in c.lower()), df_tr_unif.columns[0])
-                        match_tr = df_tr_unif[df_tr_unif[col_id_tr].astype(str).str.strip().str.upper() == id_tractor_raw.strip().upper()]
-                        if not match_tr.empty:
-                            r_tr = match_tr.iloc[0]
-                            marca = str(r_tr.get('marca', r_tr.get('modelo_tractor', 'Unidad')))
-                            modelo = str(r_tr.get('modelo', r_tr.get('anio', r_tr.get('año', ''))))
-                            eco = str(r_tr.get('numero_economico', r_tr.get('economico', '')))
-                            partes_tr = [marca]
-                            if modelo and modelo.lower() != 'nan': partes_tr.append(f"mod {modelo}")
-                            if eco and eco.lower() != 'nan': partes_tr.append(f"(Eco: {eco})")
-                            desc_tractor = " ".join(partes_tr)
-                            placas_tractor = str(r_tr.get('placas', r_tr.get('placa', 'No especificada')))
-
-                    desc_caja = id_caja1_raw or "No especificada"
-                    if not df_cj_unif.empty and id_caja1_raw:
-                        col_id_cj = next((c for c in df_cj_unif.columns if 'id' in c.lower()), df_cj_unif.columns[0])
-                        match_cj = df_cj_unif[df_cj_unif[col_id_cj].astype(str).str.strip().str.upper() == id_caja1_raw.strip().upper()]
-                        if not match_cj.empty:
-                            r_cj = match_cj.iloc[0]
-                            placa_cj = str(r_cj.get('placas', r_cj.get('placa', '')))
-                            desc_caja = f"Placa: {placa_cj}" if placa_cj else id_caja1_raw
-
-                    st.markdown(
-                        f"""
-                        <div style='background-color: #f8f9fa; padding: 14px; border-radius: 8px; border: 2px solid #ffc107; margin-bottom: 15px;'>
-                            <p style='margin: 0; font-weight: bold; color: #856404; font-size: 16px;'>🔍 Datos de la Orden y Finca Seleccionada:</p>
-                            <hr style='margin: 6px 0;'>
-                            <p style='margin: 4px 0;'><b>🏢 Finca Activa:</b> {finca_sel_nombre} ({id_finca_activa})</p>
-                            <p style='margin: 4px 0;'><b>👤 Operador:</b> {nombre_operador}</p>
-                            <p style='margin: 4px 0;'><b>🚛 Unidad:</b> {desc_tractor} | <b>Placas:</b> {placas_tractor}</p>
-                            <p style='margin: 4px 0;'><b>📦 Caja:</b> {desc_caja}</p>
-                            <p style='margin: 4px 0;'><b>🏢 Línea de Transporte:</b> {nombre_linea}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    
-                    c1, c2, c3 = st.columns(3)
-                    with c1: 
-                        def_fac = reg_finca_actual.get('folio_factura', reg_finca_actual.get('factura', r.get('folio_factura', r.get('factura', ''))))
-                        new_fac = st.text_input("Número de Factura (Finca)", value=str(def_fac), key="efac_finca_h")
-                    with c2: 
-                        def_rem = reg_finca_actual.get('remision', r.get('remision', ''))
-                        new_rem = st.text_input("Número de Remisión (Finca)", value=str(def_rem), key="erem_finca_h")
-                    with c3: 
-                        def_lote = reg_finca_actual.get('id_lote', reg_finca_actual.get('lote', r.get('id_lote', r.get('lote', ''))))
-                        new_lote = st.text_input("Número de Lote (Finca)", value=str(def_lote), key="elote_finca_h")
-                        
-                    def_obs = reg_finca_actual.get('observaciones', r.get('observaciones', ''))
-                    new_obs = st.text_area("Observaciones", value=str(def_obs), key="eobs_finca_h")
-                    
-                    if st.button("💾 Guardar Cambios para esta Finca", type="primary", use_container_width=True):
+                if btn_guardar_compra:
+                    if not folio_aaps.strip():
+                        st.warning("⚠️ Debe ingresar el Folio o Referencia de Compra AAPS.")
+                    else:
                         try:
                             _, sh, _ = get_db()
-                            ws_of = sh.worksheet("Orden_Fincas")
-                            headers_of = [str(h).strip() for h in ws_of.row_values(1)]
                             
-                            # Buscar la celda o fila en Orden_Fincas que coincida con orden y finca
-                            cell_found = None
-                            all_records = ws_of.get_all_records()
-                            row_idx = 2
-                            for rec in all_records:
-                                if str(rec.get('id_orden', '')).strip().upper() == str(sel_orden).strip().upper() and \
-                                   str(rec.get('id_finca', '')).strip().upper() == str(id_finca_activa).strip().upper():
-                                    cell_found = row_idx
-                                    break
-                                row_idx += 1
-                                
-                            def idx_col_of(name): return headers_of.index(name) + 1 if name in headers_of else None
+                            # 1. Asegurar hojas y columnas
+                            ws_comp = sh.worksheet("Compra_Guias")
+                            ensure_columns_exist(ws_comp, [
+                                "id_compra", "id_empresa", "emisor", "folio_compra_AAPS", 
+                                "fecha_compra", "observaciones", "estado", "usuario_registra"
+                            ])
 
-                            if cell_found:
-                                if idx_col_of("folio_factura"): ws_of.update_cell(cell_found, idx_col_of("folio_factura"), new_fac)
-                                if idx_col_of("remision"): ws_of.update_cell(cell_found, idx_col_of("remision"), new_rem)
-                                if idx_col_of("id_lote"): ws_of.update_cell(cell_found, idx_col_of("id_lote"), new_lote)
-                                elif idx_col_of("lote"): ws_of.update_cell(cell_found, idx_col_of("lote"), new_lote)
-                                if idx_col_of("observaciones"): ws_of.update_cell(cell_found, idx_col_of("observaciones"), new_obs)
-                            else:
-                                # Si no existe el registro detallado en Orden_Fincas, lo agregamos
-                                ensure_columns_exist(ws_of, ["id", "id_orden", "id_finca", "folio_factura", "remision", "id_lote", "observaciones"])
-                                append_row_dict_safe(ws_of, {
-                                    "id": f"{sel_orden}-{id_finca_activa}",
-                                    "id_orden": sel_orden,
-                                    "id_finca": id_finca_activa,
-                                    "folio_factura": new_fac,
-                                    "remision": new_rem,
-                                    "id_lote": new_lote,
-                                    "observaciones": new_obs
-                                })
-                            
-                            st.success(f"¡Información actualizada correctamente para la finca {finca_sel_nombre}!")
-                            st.rerun()
+                            ws_stock = sh.worksheet("Guias_Folios_Stock")
+                            ensure_columns_exist(ws_stock, [
+                                "id_stock", "id_compra", "id_empresa", "tipo_documento", 
+                                "folio", "estado", "id_orden_asignada"
+                            ])
+
+                            # Generar ID de compra consecutivo
+                            all_compras = ws_comp.get_all_records()
+                            id_compra_gen = f"CG-{datetime.now().strftime('%Y%m%d')}-{len(all_compras)+1:04d}"
+
+                            row_compra = {
+                                "id_compra": id_compra_gen,
+                                "id_empresa": id_emp_principal,
+                                "emisor": "Asociación Agrícola Local de Productores de Banano (AAPS)",
+                                "folio_compra_AAPS": folio_aaps.strip(),
+                                "fecha_compra": fecha_compra.isoformat(),
+                                "observaciones": obs_compra,
+                                "estado": "ACTIVO",
+                                "usuario_registra": st.session_state.username
+                            }
+
+                            if append_row_dict_safe(ws_comp, row_compra):
+                                # Generar folios individuales en stock para cada documento
+                                total_folios_generados = 0
+                                for doc_n, (f_ini, f_fin) in rangos_capturados.items():
+                                    if f_fin >= f_ini:
+                                        for f_num in range(int(f_ini), int(f_fin) + 1):
+                                            row_f_stock = {
+                                                "id_stock": f"{id_compra_gen}-{doc_n[:3].upper()}-{f_num}",
+                                                "id_compra": id_compra_gen,
+                                                "id_empresa": id_emp_principal,
+                                                "tipo_documento": doc_n,
+                                                "folio": str(f_num),
+                                                "estado": "DISPONIBLE",
+                                                "id_orden_asignada": ""
+                                            }
+                                            append_row_dict_safe(ws_stock, row_f_stock)
+                                            total_folios_generados += 1
+
+                                st.success(f"✅ ¡Lote **{id_compra_gen}** registrado con éxito ante la AAPS! Se generaron **{total_folios_generados} folios** individuales disponibles.")
+                                st.balloons()
                         except Exception as e:
-                            st.error(f"Error al actualizar: {e}")
+                            st.error(f"Error al registrar la compra de guías: {e}")
 
+        with tab_compra2:
+            st.markdown("### Inventario General y Stock de Folios Físicos (AAPS)")
+            df_compras, _ = get_df_safe("Compra_Guias")
+            df_stock, _ = get_df_safe("Guias_Folios_Stock")
+
+            if df_compras.empty:
+                st.info("ℹ️ No hay lotes de compras de guías registrados en el sistema.")
+            else:
+                # Filtrar por empresa principal
+                df_c_emp = df_compras[df_compras['id_empresa'].astype(str).str.upper() == id_emp_principal.upper()] if 'id_empresa' in df_compras.columns else df_compras
+                
+                if df_c_emp.empty:
+                    st.warning(f"⚠️ No hay lotes registrados para la empresa actual: **{emp_nombre_principal}**.")
+                else:
+                    st.dataframe(df_c_emp, use_container_width=True)
+
+                    st.markdown("#### 📦 Detalle de Stock por Folio")
+                    if not df_stock.empty:
+                        lote_sel_inv = st.selectbox("Filtrar por Lote de Compra", df_c_emp['id_compra'].tolist(), key="sel_lote_inventario")
+                        df_stock_lote = df_stock[df_stock['id_compra'].astype(str) == str(lote_sel_inv)]
+                        
+                        if df_stock_lote.empty:
+                            st.info("ℹ️ No hay folios registrados para este lote.")
+                        else:
+                            col_st1, col_st2, col_st3 = st.columns(3)
+                            total_f = len(df_stock_lote)
+                            disp_f = len(df_stock_lote[df_stock_lote['estado'].astype(str).str.upper() == 'DISPONIBLE'])
+                            asig_f = len(df_stock_lote[df_stock_lote['estado'].astype(str).str.upper() == 'ASIGNADO'])
+                            
+                            with col_st1: st.metric("Total Folios", total_f)
+                            with col_st2: st.metric("Disponibles", disp_f, delta=f"{disp_f} libres")
+                            with col_st3: st.metric("Asignados", asig_f, delta=f"-{asig_f} usados", delta_color="inverse")
+
+                            st.dataframe(df_stock_lote[['id_stock', 'tipo_documento', 'folio', 'estado', 'id_orden_asignada']], use_container_width=True)
+                    else:
+                        st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
     
     # --------------------------------------------------------------------------
     # 6.4 Submódulo: ⚙️ Catálogos Maestros (CRUD Completo)
