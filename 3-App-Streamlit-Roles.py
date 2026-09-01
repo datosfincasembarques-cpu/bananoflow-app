@@ -1754,12 +1754,20 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
     ])
     hora_dispositivo = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Cargar opciones de Clientes combinando Código + Nombre para que el usuario no adivine
+    # Carga robusta de Clientes mostrando Código + Nombre completo
     df_cli_db, _ = get_df_safe("Clientes")
     if not df_cli_db.empty:
         col_id_cli = next((c for c in df_cli_db.columns if 'id' in c.lower() or 'codigo' in c.lower() or 'clik' in c.lower()), df_cli_db.columns[0])
         col_nom_cli = next((c for c in df_cli_db.columns if 'nombre' in c.lower() or 'cliente' in c.lower() or 'razon' in c.lower() or 'desc' in c.lower()), df_cli_db.columns[-1])
-        clientes_opciones = [f"{row[col_id_cli]} - {row[col_nom_cli]}" if col_id_cli != col_nom_cli else str(row[col_nom_cli]) for _, row in df_cli_db.iterrows()]
+        
+        clientes_opciones = []
+        for _, row in df_cli_db.iterrows():
+            c_id = str(row[col_id_cli])
+            c_nom = str(row[col_nom_cli])
+            if c_id != c_nom:
+                clientes_opciones.append(f"{c_id} - {c_nom}")
+            else:
+                clientes_opciones.append(c_nom)
     else:
         clientes_opciones = ["C001 - General / Inventario", "C002 - Cliente Local"]
 
@@ -1803,7 +1811,7 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
                 "cantidad": st.column_config.NumberColumn("Cantidad (Unidades)", min_value=0.0, step=1.0, format="%.0f"),
                 "calidad": st.column_config.SelectboxColumn("Calidad", options=calidades_opciones, required=True),
                 "carton": st.column_config.SelectboxColumn("Tipo de Cartón", options=cartones_opciones, required=True),
-                "cliente": st.column_config.SelectboxColumn("Cliente", options=clientes_opciones, required=True),
+                "cliente": st.column_config.SelectboxColumn("Cliente (Código - Nombre)", options=clientes_opciones, required=True),
                 "peso_unitario": st.column_config.NumberColumn("Peso (kg)", min_value=0.0, step=0.01, format="%.2f")
             },
             key="editor_produccion_tabular"
@@ -1890,7 +1898,11 @@ elif rol_actual in ["PLANTA", "JEFE_PLANTA"]:
         col_dt_1, col_dt_2 = st.columns(2)
         with col_dt_1:
             st.markdown("#### 👤 Datos del Cliente y Operador")
-            cliente_tercera_local = st.selectbox("Cliente", options=clientes_opciones, key="terc_loc_cliente")
+            cliente_tercera_local = st.selectbox("Seleccione el Cliente", options=clientes_opciones, key="terc_loc_cliente")
+            
+            # Etiqueta visual adicional para mostrar claramente el cliente seleccionado en grande
+            st.info(f"🏷️ **Cliente Destino Seleccionado:**\n\n**{cliente_tercera_local}**")
+
             nombre_operador = st.text_input("Nombre del Operador", key="terc_loc_operador")
             num_licencia = st.text_input("Número de Licencia Operador", key="terc_loc_licencia")
             
