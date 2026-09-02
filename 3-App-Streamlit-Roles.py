@@ -1466,11 +1466,6 @@ if not df_fin.empty:
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al eliminar: {e}")
-#=================================================================================================
-     import streamlit as st
-import pandas as pd
-import sqlite3
-
 # ==========================================
 # CONFIGURACIÓN DE BASE DE DATOS LOCAL
 # ==========================================
