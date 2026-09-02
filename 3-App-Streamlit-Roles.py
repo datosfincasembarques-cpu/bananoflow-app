@@ -996,153 +996,130 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     else:
                         st.info("ℹ️ La tabla de stock de folios se encuentra vacía.")
                         
-# --------------------------------------------------------------------------
-    # 6.4 Submódulo: 📄 Remisión/Factura (Con lectura dinámica desde la tabla Clientes)
-    # --------------------------------------------------------------------------
-    if "Remisión/Factura" in menu_sel:
-        st.markdown(
-            """
-            <style>
-                html, body, [class*="css"] {
-                    font-family: Arial, sans-serif !important;
-                }
-                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stRadio, div.dataframe {
-                    font-family: Arial, sans-serif !important;
-                }
-                table, th, td {
-                    font-family: Arial, sans-serif !important;
-                }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
+with tab_cat4:
+            st.markdown("### 📦 Catálogo de Cartón")
+            
+            # Asegurar estructura de columnas para la hoja Catalogo_Carton
+            try:
+                _, sh_db, _ = get_db()
+                ws_carton = sh_db.worksheet("Catalogo_Carton")
+                ensure_columns_exist(ws_carton, ["id_carton", "tipo", "peso_kg", "descripcio"])
+            except Exception:
+                pass
 
-        st.subheader("📄 Gestión y Asignación de Lotes, Remisiones y Facturas")
-        st.caption("Seleccione una orden pendiente de documentación para asignar o actualizar su número de lote, remisión (con prefijo del cliente) y factura.")
+            df_carton, _ = get_df_safe("Catalogo_Carton")
 
-        df_ordenes, _ = get_df_safe("OrdenesCarga")
-        df_clientes, _ = get_df_safe("Clientes")
-
-        if df_ordenes.empty:
-            st.info("ℹ️ No hay órdenes de carga registradas en el sistema.")
-        else:
-            if 'id_empresa' in df_ordenes.columns and 'id_emp_principal' in locals():
-                df_ordenes = df_ordenes[df_ordenes['id_empresa'].astype(str).str.upper() == str(id_emp_principal).upper()]
-
-            if df_ordenes.empty:
-                st.warning(f"⚠️ No hay órdenes registradas para la empresa actual.")
-            else:
-                for col_necesaria in ['id_lote', 'folio_remision', 'folio_factura', 'cliente']:
-                    if col_necesaria not in df_ordenes.columns:
-                        df_ordenes[col_necesaria] = ""
-
-                # Filtrar órdenes pendientes
-                mask_pendientes = (
-                    (df_ordenes['id_lote'].astype(str).str.strip().isin(["", "nan", "None"])) |
-                    (df_ordenes['folio_remision'].astype(str).str.strip().isin(["", "nan", "None"])) |
-                    (df_ordenes['folio_factura'].astype(str).str.strip().isin(["", "nan", "None"]))
-                )
-                df_pendientes = df_ordenes[mask_pendientes]
-
-                modo_vista = st.radio(
-                    "Filtrar Órdenes para Captura",
-                    ["⚠️ Órdenes Pendientes de Documentación", "📋 Todas las Órdenes Registradas"],
-                    horizontal=True
-                )
-
-                df_trabajo = df_pendientes if "Pendientes" in modo_vista else df_ordenes
-
-                if df_trabajo.empty:
-                    st.success("🎉 ¡Excelente! No hay órdenes pendientes de documentación bajo este filtro.")
-                else:
-                    st.markdown("---")
-                    st.markdown("#### ✍️ Selección y Actualización de Documentación")
-
-                    ids_ordenes = df_trabajo['id_orden'].astype(str).tolist() if 'id_orden' in df_trabajo.columns else []
-                    
-                    if not ids_ordenes:
-                        st.warning("⚠️ No se encontraron IDs de orden válidos en el listado.")
+            # Cálculo automático del siguiente id_carton (ej. CAR-001, CAR-002...)
+            next_id_carton = "CAR-001"
+            if not df_carton.empty and "id_carton" in df_carton.columns:
+                try:
+                    nums = df_carton["id_carton"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+                    if not nums.empty:
+                        next_num = nums.max() + 1
+                        next_id_carton = f"CAR-{next_num:03d}"
                     else:
-                        orden_sel_act = st.selectbox("Seleccione la Orden de Carga", ids_ordenes, key="sel_orden_facturacion")
+                        next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
+                except Exception:
+                    next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
 
-                        fila_orden = df_trabajo[df_trabajo['id_orden'].astype(str) == str(orden_sel_act)]
-                        
-                        if not fila_orden.empty:
-                            datos_ord = fila_orden.iloc[0].to_dict()
-                            
-                            val_lote_act = str(datos_ord.get('id_lote', '') if str(datos_ord.get('id_lote', '')) not in ["nan", "None"] else "")
-                            val_rem_act = str(datos_ord.get('folio_remision', '') if str(datos_ord.get('folio_remision', '')) not in ["nan", "None"] else "")
-                            val_fac_act = str(datos_ord.get('folio_factura', '') if str(datos_ord.get('folio_factura', '')) not in ["nan", "None"] else "")
-                            val_fac2_act = str(datos_ord.get('folio_factura2', '') if str(datos_ord.get('folio_factura2', '')) not in ["nan", "None"] else "")
-                            cliente_orden = str(datos_ord.get('cliente', '')).strip().upper()
+            if not df_carton.empty:
+                st.dataframe(df_carton, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
 
-                            # Buscar el prefijo/letra de remisión directamente desde la tabla Clientes
-                            prefijo_cliente = ""
-                            if not df_clientes.empty and 'razon_social' in df_clientes.columns and 'letra_remision' in df_clientes.columns:
-                                match_cli = df_clientes[df_clientes['razon_social'].astype(str).str.strip().str.upper() == cliente_orden]
-                                if not match_cli.empty:
-                                    prefijo_cliente = str(match_cli.iloc[0].get('letra_remision', '')).strip()
-                                    if prefijo_cliente in ["nan", "None"]:
-                                        prefijo_cliente = ""
+            # 1. Sección para Registrar Nuevo Cartón
+            with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
+                with st.form("form_cat_carton"):
+                    c_id = st.text_input("ID del Cartón (Generado Automáticamente)", value=next_id_carton, disabled=True)
+                    c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
+                    c_peso = st.number_input("Peso (kg)", min_value=0.0, value=18.14, format="%.2f")
+                    c_desc = st.text_input("Descripción", placeholder="Ej: Caja Telescópica 22XU")
 
-                            # Si no tiene remisión registrada, calcular consecutivo usando la letra asignada en la tabla Clientes
-                            if not val_rem_act and prefijo_cliente:
-                                remisiones_existentes = df_ordenes['folio_remision'].astype(str).tolist()
-                                count_prefijo = sum(1 for r in remisiones_existentes if r.startswith(prefijo_cliente))
-                                siguiente_consecutivo = count_prefijo + 1
-                                val_rem_act = f"{prefijo_cliente}-{siguiente_consecutivo:04d}"
+                    btn_guardar_carton = st.form_submit_button("💾 Guardar Cartón", use_container_width=True)
 
-                            with st.form(f"form_act_doc_{orden_sel_act}"):
-                                st.markdown(f"**Editando documentos para la orden:** `{orden_sel_act}` | **Cliente:** `{cliente_orden if cliente_orden else 'GENERAL'}`")
-                                if prefijo_cliente:
-                                    st.info(f"ℹ️ Letra de remisión asignada desde el catálogo de clientes: **{prefijo_cliente}**")
-                                else:
-                                    st.warning("⚠️ Este cliente no tiene configurada una letra de remisión en el catálogo de Clientes.")
+                    if btn_guardar_carton:
+                        if not c_tipo.strip():
+                            st.warning("⚠️ El campo 'Tipo' es obligatorio.")
+                        else:
+                            try:
+                                _, sh, _ = get_db()
+                                ws_c = sh.worksheet("Catalogo_Carton")
+                                ensure_columns_exist(ws_c, ["id_carton", "tipo", "peso_kg", "descripcio"])
                                 
-                                f_r1, f_r2 = st.columns(2)
-                                with f_r1:
-                                    nuevo_lote = st.text_input("Número de Lote (Guía AAPS)", value=val_lote_act, placeholder="Ej: CG-20260830-0001")
-                                    nuevo_rem = st.text_input("Número de Remisión (Letra y Consecutivo)", value=val_rem_act, placeholder="Ej: Z102-0001 o Y123-0001")
-                                with f_r2:
-                                    nueva_fac = st.text_input("Número de Factura", value=val_fac_act, placeholder="Ej: FAC-00123")
-                                    nueva_fac2 = st.text_input("Factura 2 (Opcional)", value=val_fac2_act, placeholder="Ej: FAC-00124")
+                                nuevo_carton = {
+                                    "id_carton": next_id_carton,
+                                    "tipo": c_tipo.strip(),
+                                    "peso_kg": float(c_peso),
+                                    "descripcio": c_desc.strip()
+                                }
+                                
+                                append_row_dict_safe(ws_c, nuevo_carton)
+                                st.success(f"✅ ¡Cartón **{next_id_carton}** registrado con éxito!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al guardar el cartón: {e}")
 
-                                btn_guardar_docs = st.form_submit_button("💾 Guardar y Actualizar Documentación", use_container_width=True)
-
-                                if btn_guardar_docs:
-                                    try:
-                                        _, sh, _ = get_db()
-                                        ws_ord = sh.worksheet("OrdenesCarga")
-                                        
-                                        ensure_columns_exist(ws_ord, ["id_orden", "id_lote", "folio_remision", "folio_factura", "folio_factura2"])
-
-                                        cell_id = ws_ord.find(str(orden_sel_act))
-                                        if cell_id:
-                                            row_idx = cell_id.row
-                                            header_row = ws_ord.row_values(1)
-                                            
-                                            def actualizar_columna(nombre_col, valor_val):
-                                                if nombre_col in header_row:
-                                                    col_idx = header_row.index(nombre_col) + 1
-                                                    ws_ord.update_cell(row_idx, col_idx, valor_val)
-
-                                            actualizar_columna("id_lote", nuevo_lote)
-                                            actualizar_columna("folio_remision", nuevo_rem)
-                                            actualizar_columna("folio_factura", nueva_fac)
-                                            actualizar_columna("folio_factura2", nueva_fac2)
-
-                                            st.success(f"✅ ¡Documentación actualizada con éxito para la orden **{orden_sel_act}**!")
-                                            st.balloons()
-                                        else:
-                                            st.error("❌ No se pudo localizar la fila de la orden en la base de datos de Google Sheets.")
-                                    except Exception as e:
-                                        st.error(f"Error al actualizar la documentación: {e}")
-
-                st.markdown("---")
-                st.markdown("#### 📋 Resumen del Estado de Documentación en Órdenes")
-                cols_mostrar = [c for c in ["id_orden", "fecha_creacion", "cliente", "id_lote", "folio_remision", "folio_factura", "estado"] if c in df_ordenes.columns]
-                st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)                
-                
+            # 2. Sección para Modificar o Eliminar Cartón Existente
+            if not df_carton.empty:
+                with st.expander("✏️ Modificar o 🗑️ Eliminar Cartón Existente", expanded=False):
+                    lista_cartones = df_carton["id_carton"].astype(str) + " - " + df_carton["tipo"].astype(str)
+                    carton_seleccionado = st.selectbox("Seleccione el Cartón a Gestionar", options=lista_cartones)
+                    
+                    if carton_seleccionado:
+                        id_seleccionado = carton_seleccionado.split(" - ")[0]
+                        row_data = df_carton[df_carton["id_carton"].astype(str) == id_seleccionado].iloc[0]
+                        
+                        with st.form("form_editar_carton"):
+                            edit_tipo = st.text_input("Tipo de Cartón", value=str(row_data["tipo"]))
+                            edit_peso = st.number_input("Peso (kg)", min_value=0.0, value=float(row_data["peso_kg"]), format="%.2f")
+                            edit_desc = st.text_input("Descripción", value=str(row_data["descripcio"]))
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            with col_btn1:
+                                btn_actualizar = st.form_submit_button("💾 Actualizar Cambios", use_container_width=True)
+                            with col_btn2:
+                                btn_eliminar = st.form_submit_button("🗑️ Eliminar Registro", use_container_width=True)
+                                
+                            if btn_actualizar:
+                                try:
+                                    _, sh, _ = get_db()
+                                    ws_c = sh.worksheet("Catalogo_Carton")
+                                    cell_c = ws_c.find(str(id_seleccionado))
+                                    if cell_c:
+                                        row_idx = cell_c.row
+                                        header_vals = ws_c.row_values(1)
+                                        actualizaciones = {
+                                            "tipo": edit_tipo.strip(),
+                                            "peso_kg": float(edit_peso),
+                                            "descripcio": edit_desc.strip()
+                                        }
+                                        for k, v in actualizaciones.items():
+                                            if k in header_vals:
+                                                c_idx = header_vals.index(k) + 1
+                                                ws_c.update_cell(row_idx, c_idx, v)
+                                        st.success(f"✅ ¡Cartón **{id_seleccionado}** actualizado con éxito!")
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                    else:
+                                        st.error("No se encontró el registro en la base de datos.")
+                                except Exception as e:
+                                    st.error(f"Error al actualizar: {e}")
+                                    
+                            if btn_eliminar:
+                                try:
+                                    _, sh, _ = get_db()
+                                    ws_c = sh.worksheet("Catalogo_Carton")
+                                    cell_c = ws_c.find(str(id_seleccionado))
+                                    if cell_c:
+                                        ws_c.delete_rows(cell_c.row)
+                                        st.success(fey"🗑️ ¡Cartón **{id_seleccionado}** eliminado con éxito!")
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                    else:
+                                        st.error("No se encontró el registro para eliminar.")
+                                except Exception as e:
+                                    st.error(f"Error al eliminar: {e}")                
 # --------------------------------------------------------------------------
     # 6.5 Submódulo: ⚙️ Catálogos Maestros
     # --------------------------------------------------------------------------
