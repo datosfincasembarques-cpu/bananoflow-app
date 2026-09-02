@@ -1334,10 +1334,14 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             
                             append_row_dict_safe(ws_c, nuevo_carton)
                             st.success(f"✅ ¡Cartón **{next_id_carton}** registrado con éxito!")
+                            
+                            # Limpiar la caché de Streamlit y recargar la página
+                            st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Error al guardar el cartón: {e}")                
-# --------------------------------------------------------------------------
+                            st.error(f"Error al guardar el cartón: {e}")
+    
+    # --------------------------------------------------------------------------
     # 6.6 Submódulo: 📈 Reportes y Concentrados Corporativos
     # --------------------------------------------------------------------------
     elif "Reportes y Concentrados" in menu_sel:
