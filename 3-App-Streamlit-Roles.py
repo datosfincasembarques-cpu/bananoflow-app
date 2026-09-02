@@ -1553,176 +1553,176 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                     st.error(f"Error al eliminar: {e}")
 
     # ------------------------------------------------------------------
-        # TAB 4: CATÁLOGO DE CARTÓN (Solo muestra Código y Nombre/Tipo en pantalla)
-        # ------------------------------------------------------------------
-        with tab_cat4:
-            st.markdown("### 📦 Catálogo de Cartón")
-            
-            try:
-                _, sh_db, _ = get_db()
-                ws_carton = sh_db.worksheet("Catalogo_Carton")
-                ensure_columns_exist(ws_carton, ["id_carton", "tipo", "peso_kg", "descripcio"])
-            except Exception:
-                pass
+# TAB 4: CATÁLOGO DE CARTÓN (Solo muestra Código y Nombre/Tipo en pantalla)
+# ------------------------------------------------------------------
+with tab_cat4:
+    st.markdown("### 📦 Catálogo de Cartón")
+    
+    try:
+        _, sh_db, _ = get_db()
+        ws_carton = sh_db.worksheet("Catalogo_Carton")
+        ensure_columns_exist(ws_carton, ["id_carton", "tipo", "peso_kg", "descripcio"])
+    except Exception:
+        pass
 
-            df_carton, _ = get_df_safe("Catalogo_Carton")
+    df_carton, _ = get_df_safe("Catalogo_Carton")
 
-            col_id_car = "id_carton"
-            col_tipo_car = "tipo"
-            col_peso_car = "peso_kg"
-            col_desc_car = "descripcio"
-            
-            if not df_carton.empty:
-                cols_c = [str(c).strip() for c in df_carton.columns]
-                col_id_car = next((c for c in cols_c if 'id' in c.lower() or 'codigo' in c.lower() or 'carton' in c.lower()), cols_c[0])
-                col_tipo_car = next((c for c in cols_c if 'tipo' in c.lower() or 'nombre' in c.lower()), cols_c[1] if len(cols_c) > 1 else cols_c[0])
-                col_peso_car = next((c for c in cols_c if 'peso' in c.lower() or 'kg' in c.lower()), 'peso_kg')
-                col_desc_car = next((c for c in cols_c if 'desc' in c.lower()), 'descripcio')
+    col_id_car = "id_carton"
+    col_tipo_car = "tipo"
+    col_peso_car = "peso_kg"
+    col_desc_car = "descripcio"
+    
+    if not df_carton.empty:
+        cols_c = [str(c).strip() for c in df_carton.columns]
+        col_id_car = next((c for c in cols_c if 'id' in c.lower() or 'codigo' in c.lower() or 'carton' in c.lower()), cols_c[0])
+        col_tipo_car = next((c for c in cols_c if 'tipo' in c.lower() or 'nombre' in c.lower()), cols_c[1] if len(cols_c) > 1 else cols_c[0])
+        col_peso_car = next((c for c in cols_c if 'peso' in c.lower() or 'kg' in c.lower()), 'peso_kg')
+        col_desc_car = next((c for c in cols_c if 'desc' in c.lower()), 'descripcio')
 
-            next_id_carton = "CAR-001"
-            if not df_carton.empty and col_id_car in df_carton.columns:
-                try:
-                    nums = df_carton[col_id_car].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
-                    if not nums.empty:
-                        next_num = nums.max() + 1
-                        next_id_carton = f"CAR-{next_num:03d}"
-                    else:
-                        next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
-                except Exception:
-                    next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
-
-            if not df_carton.empty:
-                cols_vista = [c for c in [col_id_car, col_tipo_car] if c in df_carton.columns]
-                if cols_vista:
-                    st.dataframe(df_carton[cols_vista], use_container_width=True)
-                else:
-                    st.dataframe(df_carton, use_container_width=True)
+    next_id_carton = "CAR-001"
+    if not df_carton.empty and col_id_car in df_carton.columns:
+        try:
+            nums = df_carton[col_id_car].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+            if not nums.empty:
+                next_num = nums.max() + 1
+                next_id_carton = f"CAR-{next_num:03d}"
             else:
-                st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
+                next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
+        except Exception:
+            next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
 
-            with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
-                with st.form("form_cat_carton"):
-                    c_id = st.text_input("ID del Cartón", value=next_id_carton)
-                    c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
-                    c_peso = st.number_input("Peso (kg)", min_value=0.0, value=18.14, format="%.2f")
-                    c_desc = st.text_input("Descripción", placeholder="Ej: Caja Telescópica 22XU")
+    if not df_carton.empty:
+        cols_vista = [c for c in [col_id_car, col_tipo_car] if c in df_carton.columns]
+        if cols_vista:
+            st.dataframe(df_carton[cols_vista], use_container_width=True)
+        else:
+            st.dataframe(df_carton, use_container_width=True)
+    else:
+        st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
 
-                    btn_guardar_carton = st.form_submit_button("💾 Guardar Cartón", use_container_width=True)
+    with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
+        with st.form("form_cat_carton"):
+            c_id = st.text_input("ID del Cartón", value=next_id_carton)
+            c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
+            c_peso = st.number_input("Peso (kg)", min_value=0.0, value=18.14, format="%.2f")
+            c_desc = st.text_input("Descripción", placeholder="Ej: Caja Telescópica 22XU")
 
-                    if btn_guardar_carton:
-                        if not c_id.strip() or not c_tipo.strip():
-                            st.warning("⚠️ El ID y el Tipo de cartón son obligatorios.")
-                        else:
-                            try:
-                                _, sh, _ = get_db()
-                                ws_c = sh.worksheet("Catalogo_Carton")
-                                ensure_columns_exist(ws_c, ["id_carton", "tipo", "peso_kg", "descripcio"])
-                                
-                                df_actual_car, _ = get_df_safe("Catalogo_Carton")
-                                if not df_actual_car.empty and col_id_car in df_actual_car.columns:
-                                    ids_existentes_car = df_actual_car[col_id_car].astype(str).str.strip().values
-                                    if c_id.strip() in ids_existentes_car:
-                                        st.error(f"⚠️ El ID de cartón **{c_id.strip()}** ya se encuentra registrado en el catálogo.")
-                                    else:
-                                        nuevo_carton = {
-                                            "id_carton": c_id.strip(),
-                                            "tipo": c_tipo.strip(),
-                                            "peso_kg": float(c_peso),
-                                            "descripcio": c_desc.strip()
-                                        }
-                                        append_row_dict_safe(ws_c, nuevo_carton)
-                                        st.success(f"✅ ¡Cartón **{c_id.strip()}** registrado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                else:
-                                    nuevo_carton = {
-                                        "id_carton": c_id.strip(),
-                                        "tipo": c_tipo.strip(),
-                                        "peso_kg": float(c_peso),
-                                        "descripcio": c_desc.strip()
-                                    }
-                                    append_row_dict_safe(ws_c, nuevo_carton)
-                                    st.success(f"✅ ¡Cartón **{c_id.strip()}** registrado con éxito!")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                            except Exception as e:
-                                st.error(f"Error al guardar el cartón: {e}")
+            btn_guardar_carton = st.form_submit_button("💾 Guardar Cartón", use_container_width=True)
 
-            if not df_carton.empty:
-                with st.expander("✏️ Modificar o Eliminar Cartón Existente", expanded=False):
-                    s_id = df_carton[col_id_car].astype(str).fillna("").str.strip()
-                    s_tipo = df_carton[col_tipo_car].astype(str).fillna("").str.strip()
-                    lista_cartones = s_id + " - " + s_tipo
-                    carton_seleccionado = st.selectbox("Seleccione el Cartón a Gestionar", options=lista_cartones)
-                    
-                    if carton_seleccionado:
-                        id_seleccionado = carton_seleccionado.split(" - ")[0].strip()
-                        mask = df_carton[col_id_car].astype(str).str.strip() == id_seleccionado
-                        if mask.any():
-                            row_data = df_carton[mask].iloc[0]
-                        else:
-                            row_data = df_carton.iloc[0]
+            if btn_guardar_carton:
+                if not c_id.strip() or not c_tipo.strip():
+                    st.warning("⚠️ El ID y el Tipo de cartón son obligatorios.")
+                else:
+                    try:
+                        _, sh, _ = get_db()
+                        ws_c = sh.worksheet("Catalogo_Carton")
+                        ensure_columns_exist(ws_c, ["id_carton", "tipo", "peso_kg", "descripcio"])
                         
+                        df_actual_car, _ = get_df_safe("Catalogo_Carton")
+                        if not df_actual_car.empty and col_id_car in df_actual_car.columns:
+                            ids_existentes_car = df_actual_car[col_id_car].astype(str).str.strip().values
+                            if c_id.strip() in ids_existentes_car:
+                                st.error(f"⚠️ El ID de cartón **{c_id.strip()}** ya se encuentra registrado en el catálogo.")
+                            else:
+                                nuevo_carton = {
+                                    "id_carton": c_id.strip(),
+                                    "tipo": c_tipo.strip(),
+                                    "peso_kg": float(c_peso),
+                                    "descripcio": c_desc.strip()
+                                }
+                                append_row_dict_safe(ws_c, nuevo_carton)
+                                st.success(f"✅ ¡Cartón **{c_id.strip()}** registrado con éxito!")
+                                st.cache_data.clear()
+                                st.rerun()
+                        else:
+                            nuevo_carton = {
+                                "id_carton": c_id.strip(),
+                                "tipo": c_tipo.strip(),
+                                "peso_kg": float(c_peso),
+                                "descripcio": c_desc.strip()
+                            }
+                            append_row_dict_safe(ws_c, nuevo_carton)
+                            st.success(f"✅ ¡Cartón **{c_id.strip()}** registrado con éxito!")
+                            st.cache_data.clear()
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al guardar el cartón: {e}")
+
+    if not df_carton.empty:
+        with st.expander("✏️ Modificar o Eliminar Cartón Existente", expanded=False):
+            s_id = df_carton[col_id_car].astype(str).fillna("").str.strip()
+            s_tipo = df_carton[col_tipo_car].astype(str).fillna("").str.strip()
+            lista_cartones = s_id + " - " + s_tipo
+            carton_seleccionado = st.selectbox("Seleccione el Cartón a Gestionar", options=lista_cartones)
+            
+            if carton_seleccionado:
+                id_seleccionado = carton_seleccionado.split(" - ")[0].strip()
+                mask = df_carton[col_id_car].astype(str).str.strip() == id_seleccionado
+                if mask.any():
+                    row_data = df_carton[mask].iloc[0]
+                else:
+                    row_data = df_carton.iloc[0]
+                
+                val_peso = 18.14
+                if col_peso_car in row_data and pd.notna(row_data[col_peso_car]):
+                    try:
+                        val_peso = float(str(row_data[col_peso_car]).strip())
+                    except Exception:
                         val_peso = 18.14
-                        if col_peso_car in row_data and pd.notna(row_data[col_peso_car]):
-                            try:
-                                val_peso = float(str(row_data[col_peso_car]).strip())
-                            except Exception:
-                                val_peso = 18.14
 
-                        val_tipo = str(row_data[col_tipo_car]) if col_tipo_car in row_data and pd.notna(row_data[col_tipo_car]) else ""
-                        val_desc = str(row_data[col_desc_car]) if col_desc_car in row_data and pd.notna(row_data[col_desc_car]) else ""
+                val_tipo = str(row_data[col_tipo_car]) if col_tipo_car in row_data and pd.notna(row_data[col_tipo_car]) else ""
+                val_desc = str(row_data[col_desc_car]) if col_desc_car in row_data and pd.notna(row_data[col_desc_car]) else ""
 
-                        with st.form("form_editar_carton"):
-                            edit_tipo = st.text_input("Tipo de Cartón", value=val_tipo)
-                            edit_peso = st.number_input("Peso (kg)", min_value=0.0, value=val_peso, format="%.2f")
-                            edit_desc = st.text_input("Descripción", value=val_desc)
+                with st.form("form_editar_carton"):
+                    edit_tipo = st.text_input("Tipo de Cartón", value=val_tipo)
+                    edit_peso = st.number_input("Peso (kg)", min_value=0.0, value=val_peso, format="%.2f")
+                    edit_desc = st.text_input("Descripción", value=val_desc)
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        btn_actualizar = st.form_submit_button("💾 Actualizar Cambios", use_container_width=True)
+                    with col_btn2:
+                        btn_eliminar = st.form_submit_button("🗑️ Eliminar Registro", use_container_width=True)
+                        
+                    if btn_actualizar:
+                        try:
+                            _, sh, _ = get_db()
+                            ws_c = sh.worksheet("Catalogo_Carton")
+                            cell_c = ws_c.find(str(id_seleccionado))
+                            if cell_c:
+                                row_idx = cell_c.row
+                                header_vals = ws_c.row_values(1)
+                                actualizaciones = {
+                                    "tipo": edit_tipo.strip(),
+                                    "peso_kg": float(edit_peso),
+                                    "descripcio": edit_desc.strip()
+                                }
+                                for k, v in actualizaciones.items():
+                                    if k in header_vals:
+                                        c_idx = header_vals.index(k) + 1
+                                        ws_c.update_cell(row_idx, c_idx, v)
+                                st.success(f"✅ ¡Cartón **{id_seleccionado}** actualizado con éxito!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("No se encontró el registro en la base de datos.")
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
                             
-                            col_btn1, col_btn2 = st.columns(2)
-                            with col_btn1:
-                                btn_actualizar = st.form_submit_button("💾 Actualizar Cambios", use_container_width=True)
-                            with col_btn2:
-                                btn_eliminar = st.form_submit_button("🗑️ Eliminar Registro", use_container_width=True)
-                                
-                            if btn_actualizar:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_c = sh.worksheet("Catalogo_Carton")
-                                    cell_c = ws_c.find(str(id_seleccionado))
-                                    if cell_c:
-                                        row_idx = cell_c.row
-                                        header_vals = ws_c.row_values(1)
-                                        actualizaciones = {
-                                            "tipo": edit_tipo.strip(),
-                                            "peso_kg": float(edit_peso),
-                                            "descripcio": edit_desc.strip()
-                                        }
-                                        for k, v in actualizaciones.items():
-                                            if k in header_vals:
-                                                c_idx = header_vals.index(k) + 1
-                                                ws_c.update_cell(row_idx, c_idx, v)
-                                        st.success(f"✅ ¡Cartón **{id_seleccionado}** actualizado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro en la base de datos.")
-                                except Exception as e:
-                                    st.error(f"Error al actualizar: {e}")
-                                    
-                            if btn_eliminar:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_c = sh.worksheet("Catalogo_Carton")
-                                    cell_c = ws_c.find(str(id_seleccionado))
-                                    if cell_c:
-                                        ws_c.delete_rows(cell_c.row)
-                                        st.success(f"🗑️ ¡Cartón **{id_seleccionado}** eliminado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro para eliminar.")
-                                except Exception as e:
-                                    st.error(f"Error al eliminar: {e}")
+                    if btn_eliminar:
+                        try:
+                            _, sh, _ = get_db()
+                            ws_c = sh.worksheet("Catalogo_Carton")
+                            cell_c = ws_c.find(str(id_seleccionado))
+                            if cell_c:
+                                ws_c.delete_rows(cell_c.row)
+                                st.success(f"🗑️ ¡Cartón **{id_seleccionado}** eliminado con éxito!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("No se encontró el registro para eliminar.")
+                        except Exception as e:
+                            st.error(f"Error al eliminar: {e}")
                                     
     # --------------------------------------------------------------------------
     # 6.6 Submódulo: 📈 Reportes y Concentrados Corporativos
