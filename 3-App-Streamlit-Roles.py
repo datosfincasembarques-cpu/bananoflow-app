@@ -1558,10 +1558,23 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             df_carton, _ = get_df_safe("Catalogo_Carton")
 
+            # Detección dinámica y segura de columnas
+            col_id_car = "id_carton"
+            col_tipo_car = "tipo"
+            col_peso_car = "peso_kg"
+            col_desc_car = "descripcio"
+            
+            if not df_carton.empty:
+                cols_c = [str(c).strip() for c in df_carton.columns]
+                col_id_car = next((c for c in cols_c if 'id' in c.lower() or 'codigo' in c.lower() or 'carton' in c.lower()), cols_c[0])
+                col_tipo_car = next((c for c in cols_c if 'tipo' in c.lower() or 'nombre' in c.lower()), cols_c[1] if len(cols_c) > 1 else cols_c[0])
+                col_peso_car = next((c for c in cols_c if 'peso' in c.lower() or 'kg' in c.lower()), 'peso_kg')
+                col_desc_car = next((c for c in cols_c if 'desc' in c.lower()), 'descripcio')
+
             next_id_carton = "CAR-001"
-            if not df_carton.empty and "id_carton" in df_carton.columns:
+            if not df_carton.empty and col_id_car in df_carton.columns:
                 try:
-                    nums = df_carton["id_carton"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+                    nums = df_carton[col_id_car].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
                     if not nums.empty:
                         next_num = nums.max() + 1
                         next_id_carton = f"CAR-{next_num:03d}"
@@ -1572,7 +1585,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             if not df_carton.empty:
                 # Mostrar en pantalla únicamente el código y el nombre/tipo (sin peso ni descripción)
-                cols_vista = [c for c in ["id_carton", "tipo"] if c in df_carton.columns]
+                cols_vista = [c for c in [col_id_car, col_tipo_car] if c in df_carton.columns]
                 if cols_vista:
                     st.dataframe(df_carton[cols_vista], use_container_width=True)
                 else:
@@ -1613,17 +1626,34 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             if not df_carton.empty:
                 with st.expander("✏️ Modificar o 🗑️ Eliminar Cartón Existente", expanded=False):
-                    lista_cartones = df_carton["id_carton"].astype(str) + " - " + df_carton["tipo"].astype(str)
+                    s_id = df_carton[col_id_car].astype(str).fillna("").str.strip()
+                    s_tipo = df_carton[col_tipo_car].astype(str).fillna("").str.strip()
+                    lista_cartones = s_id + " - " + s_tipo
                     carton_seleccionado = st.selectbox("Seleccione el Cartón a Gestionar", options=lista_cartones)
                     
                     if carton_seleccionado:
-                        id_seleccionado = carton_seleccionado.split(" - ")[0]
-                        row_data = df_carton[df_carton["id_carton"].astype(str) == id_seleccionado].iloc[0]
+                        id_seleccionado = carton_seleccionado.split(" - ")[0].strip()
+                        mask = df_carton[col_id_car].astype(str).str.strip() == id_seleccionado
+                        if mask.any():
+                            row_data = df_carton[mask].iloc[0]
+                        else:
+                            row_data = df_carton.iloc[0]
                         
+                        # Extracción segura de valores para evitar errores por nulos
+                        val_peso = 18.14
+                        if col_peso_car in row_data and pd.notna(row_data[col_peso_car]):
+                            try:
+                                val_peso = float(str(row_data[col_peso_car]).strip())
+                            except Exception:
+                                val_peso = 18.14
+
+                        val_tipo = str(row_data[col_tipo_car]) if col_tipo_car in row_data and pd.notna(row_data[col_tipo_car]) else ""
+                        val_desc = str(row_data[col_desc_car]) if col_desc_car in row_data and pd.notna(row_data[col_desc_car]) else ""
+
                         with st.form("form_editar_carton"):
-                            edit_tipo = st.text_input("Tipo de Cartón", value=str(row_data["tipo"]))
-                            edit_peso = st.number_input("Peso (kg)", min_value=0.0, value=float(row_data["peso_kg"]), format="%.2f")
-                            edit_desc = st.text_input("Descripción", value=str(row_data["descripcio"]))
+                            edit_tipo = st.text_input("Tipo de Cartón", value=val_tipo)
+                            edit_peso = st.number_input("Peso (kg)", min_value=0.0, value=val_peso, format="%.2f")
+                            edit_desc = st.text_input("Descripción", value=val_desc)
                             
                             col_btn1, col_btn2 = st.columns(2)
                             with col_btn1:
