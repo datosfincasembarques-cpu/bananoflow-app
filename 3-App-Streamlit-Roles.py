@@ -1188,12 +1188,12 @@ if "Catálogos Maestros" in menu_sel:
     st.subheader("⚙️ Gestión de Catálogos Maestros")
     st.caption("Administre, actualice, edite y elimine los registros principales del sistema (Clientes, Fincas, Equipos y Cartón).")
 
-    tab_cat1, tab_cat2, tab_cat3, tab_cat4 = st.tabs([
-        "👥 Clientes", 
-        "🏡 Fincas / Predios", 
-        "🚛 Equipos y Transporte", 
-        "📦 Catálogo de Cartón"
-    ])
+  tab_cat1, tab_cat2, tab_cat3, tab_cat4 = st.tabs([
+    "👥 Clientes", 
+    "🏡 Fincas / Predios", 
+    "🚛 Equipos y Transporte", 
+    "📦 Catálogo de Cartón"
+])
 
     # ------------------------------------------------------------------
     # TAB 1: CLIENTES (Base de Datos Local SQLite)
