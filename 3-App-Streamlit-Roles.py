@@ -1591,7 +1591,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
 
-            with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
+            with st.expander("Registrar Nuevo Tipo de Cartón", expanded=False):
                 with st.form("form_cat_carton"):
                     c_id = st.text_input("ID del Cartón", value=next_id_carton)
                     c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
