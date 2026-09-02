@@ -1147,6 +1147,16 @@ if st.session_state.rol == "OFICINA_CENTRAL":
    # --------------------------------------------------------------------------
 # 6.5 Submódulo: ⚙️ Catálogos Maestros
 # --------------------------------------------------------------------------
+import sqlite3
+
+DB_NAME = "banano_Embarques.db"
+
+def get_connection():
+    """Establece y retorna la conexión con la base de datos SQLite local."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+    
 st.markdown("""
 <style>
     /* Oculta los artefactos de texto de los iconos de Streamlit que se desbordan */
