@@ -1190,7 +1190,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             df_cli, _ = get_df_safe("Clientes")
 
-            # Cálculo automático del siguiente id_cliente
             next_id_cli = "CLI-001"
             if not df_cli.empty and "id_cliente" in df_cli.columns:
                 try:
@@ -1207,7 +1206,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.info("ℹ️ No hay clientes registrados actualmente en la base de datos.")
 
-            # Registrar Nuevo Cliente
             with st.expander("➕ Registrar Nuevo Cliente", expanded=False):
                 with st.form("form_cat_cliente"):
                     cc1, cc2 = st.columns(2)
@@ -1248,7 +1246,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             except Exception as e:
                                 st.error(f"Error al guardar el cliente: {e}")
 
-            # Modificar o Eliminar Cliente
             if not df_cli.empty:
                 with st.expander("✏️ Modificar o 🗑️ Eliminar Cliente Existente", expanded=False):
                     lista_clientes = df_cli["id_cliente"].astype(str) + " - " + df_cli["razon_social"].astype(str)
@@ -1319,7 +1316,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                     st.error(f"Error al eliminar: {e}")
 
         # ------------------------------------------------------------------
-        # TAB 2: FINCAS
+        # TAB 2: FINCAS (Con detección segura de columnas)
         # ------------------------------------------------------------------
         with tab_cat2:
             st.markdown("### 🏡 Catálogo de Fincas")
@@ -1333,11 +1330,18 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             df_fin, _ = get_df_safe("Fincas")
 
-            # Cálculo automático del siguiente id_finca
+            # Detección dinámica y segura de columnas para evitar KeyErrors con hojas existentes
+            col_id_fin = "id_finca"
+            col_nom_fin = "nombre_finca"
+            if not df_fin.empty:
+                cols_fin = [str(c).strip() for c in df_fin.columns]
+                col_id_fin = next((c for c in cols_fin if 'id' in c.lower() or 'codigo' in c.lower() or 'finca' in c.lower()), cols_fin[0])
+                col_nom_fin = next((c for c in cols_fin if 'nom' in c.lower() or 'desc' in c.lower() or (c.lower() != col_id_fin.lower())), cols_fin[1] if len(cols_fin) > 1 else cols_fin[0])
+
             next_id_fin = "FIN-01"
-            if not df_fin.empty and "id_finca" in df_fin.columns:
+            if not df_fin.empty and col_id_fin in df_fin.columns:
                 try:
-                    nums = df_fin["id_finca"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+                    nums = df_fin[col_id_fin].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
                     if not nums.empty:
                         next_id_fin = f"FIN-{nums.max() + 1:02d}"
                     else:
@@ -1350,7 +1354,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.info("ℹ️ No hay fincas registradas actualmente.")
 
-            # Registrar Nueva Finca
             with st.expander("➕ Registrar Nueva Finca", expanded=False):
                 with st.form("form_cat_finca"):
                     f_id = st.text_input("ID o Código de Finca (Generado Automáticamente)", value=next_id_fin, disabled=True)
@@ -1371,18 +1374,17 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             except Exception as e:
                                 st.error(f"Error: {e}")
 
-            # Modificar o Eliminar Finca
             if not df_fin.empty:
                 with st.expander("✏️ Modificar o 🗑️ Eliminar Finca Existente", expanded=False):
-                    lista_fincas = df_fin["id_finca"].astype(str) + " - " + df_fin["nombre_finca"].astype(str)
+                    lista_fincas = df_fin[col_id_fin].astype(str) + " - " + df_fin[col_nom_fin].astype(str)
                     finca_sel = st.selectbox("Seleccione la Finca a Gestionar", options=lista_fincas)
                     
                     if finca_sel:
                         id_finca_sel = finca_sel.split(" - ")[0]
-                        row_fin = df_fin[df_fin["id_finca"].astype(str) == id_finca_sel].iloc[0]
+                        row_fin = df_fin[df_fin[col_id_fin].astype(str) == id_finca_sel].iloc[0]
                         
                         with st.form("form_editar_finca"):
-                            edit_nombre_finca = st.text_input("Nombre de la Finca", value=str(row_fin["nombre_finca"]))
+                            edit_nombre_finca = st.text_input("Nombre de la Finca", value=str(row_fin[col_nom_fin]))
                             
                             fb1, fb2 = st.columns(2)
                             with fb1:
@@ -1398,8 +1400,9 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                     if cell_f:
                                         row_idx = cell_f.row
                                         header_vals = ws_f.row_values(1)
-                                        if "nombre_finca" in header_vals:
-                                            c_idx = header_vals.index("nombre_finca") + 1
+                                        target_col_name = "nombre_finca" if "nombre_finca" in header_vals else col_nom_fin
+                                        if target_col_name in header_vals:
+                                            c_idx = header_vals.index(target_col_name) + 1
                                             ws_f.update_cell(row_idx, c_idx, edit_nombre_finca.strip())
                                         st.success(f"✅ ¡Finca **{id_finca_sel}** actualizada con éxito!")
                                         st.cache_data.clear()
@@ -1439,7 +1442,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             df_eq, _ = get_df_safe("Tractores")
 
-            # Cálculo automático del siguiente id_tractor
             next_id_eq = "TRAC-01"
             if not df_eq.empty and "id_tractor" in df_eq.columns:
                 try:
@@ -1456,7 +1458,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.info("ℹ️ No hay equipos de transporte registrados actualmente.")
 
-            # Registrar Nuevo Equipo
             with st.expander("➕ Registrar Nuevo Equipo / Tractor", expanded=False):
                 with st.form("form_cat_tractor"):
                     eq_id = st.text_input("ID del Equipo (Generado Automáticamente)", value=next_id_eq, disabled=True)
@@ -1484,7 +1485,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             except Exception as e:
                                 st.error(f"Error: {e}")
 
-            # Modificar o Eliminar Equipo
             if not df_eq.empty:
                 with st.expander("✏️ Modificar o 🗑️ Eliminar Equipo Existente", expanded=False):
                     lista_eq = df_eq["id_tractor"].astype(str) + " - " + df_eq["nombre_tractor"].astype(str)
@@ -1544,7 +1544,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                     st.error(f"Error al eliminar: {e}")
 
         # ------------------------------------------------------------------
-        # TAB 4: CATÁLOGO DE CARTÓN
+        # TAB 4: CATÁLOGO DE CARTÓN (Solo muestra Código y Nombre/Tipo en pantalla)
         # ------------------------------------------------------------------
         with tab_cat4:
             st.markdown("### 📦 Catálogo de Cartón")
@@ -1571,11 +1571,15 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
 
             if not df_carton.empty:
-                st.dataframe(df_carton, use_container_width=True)
+                # Mostrar en pantalla únicamente el código y el nombre/tipo (sin peso ni descripción)
+                cols_vista = [c for c in ["id_carton", "tipo"] if c in df_carton.columns]
+                if cols_vista:
+                    st.dataframe(df_carton[cols_vista], use_container_width=True)
+                else:
+                    st.dataframe(df_carton, use_container_width=True)
             else:
                 st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
 
-            # Registrar Nuevo Cartón
             with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
                 with st.form("form_cat_carton"):
                     c_id = st.text_input("ID del Cartón (Generado Automáticamente)", value=next_id_carton, disabled=True)
@@ -1607,7 +1611,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                             except Exception as e:
                                 st.error(f"Error al guardar el cartón: {e}")
 
-            # Modificar o Eliminar Cartón
             if not df_carton.empty:
                 with st.expander("✏️ Modificar o 🗑️ Eliminar Cartón Existente", expanded=False):
                     lista_cartones = df_carton["id_carton"].astype(str) + " - " + df_carton["tipo"].astype(str)
