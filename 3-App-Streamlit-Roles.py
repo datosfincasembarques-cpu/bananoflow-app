@@ -1591,7 +1591,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
             else:
                 st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
 
-            with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
+            with st.expander("Registrar Nuevo Tipo de Cartón", expanded=False):
                 with st.form("form_cat_carton"):
                     c_id = st.text_input("ID del Cartón", value=next_id_carton)
                     c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
@@ -1640,7 +1640,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 st.error(f"Error al guardar el cartón: {e}")
 
             if not df_carton.empty:
-                with st.expander("✏️ Modificar o 🗑️ Eliminar Cartón Existente", expanded=False):
+                with st.expander("Modificar o Eliminar Cartón Existente", expanded=False):
                     s_id = df_carton[col_id_car].astype(str).fillna("").str.strip()
                     s_tipo = df_carton[col_tipo_car].astype(str).fillna("").str.strip()
                     lista_cartones = s_id + " - " + s_tipo
