@@ -1543,7 +1543,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                                 except Exception as e:
                                     st.error(f"Error al eliminar: {e}")
 
-        # ------------------------------------------------------------------
+     # ------------------------------------------------------------------
         # TAB 4: CATÁLOGO DE CARTÓN (Solo muestra Código y Nombre/Tipo en pantalla)
         # ------------------------------------------------------------------
         with tab_cat4:
@@ -1558,7 +1558,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             df_carton, _ = get_df_safe("Catalogo_Carton")
 
-            # Detección dinámica y segura de columnas
             col_id_car = "id_carton"
             col_tipo_car = "tipo"
             col_peso_car = "peso_kg"
@@ -1584,7 +1583,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
 
             if not df_carton.empty:
-                # Mostrar en pantalla únicamente el código y el nombre/tipo (sin peso ni descripción)
                 cols_vista = [c for c in [col_id_car, col_tipo_car] if c in df_carton.columns]
                 if cols_vista:
                     st.dataframe(df_carton[cols_vista], use_container_width=True)
@@ -1595,7 +1593,7 @@ if st.session_state.rol == "OFICINA_CENTRAL":
 
             with st.expander("➕ Registrar Nuevo Tipo de Cartón", expanded=False):
                 with st.form("form_cat_carton"):
-                    c_id = st.text_input("ID del Cartón (Generado Automáticamente)", value=next_id_carton, disabled=True)
+                    c_id = st.text_input("ID del Cartón", value=next_id_carton)
                     c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
                     c_peso = st.number_input("Peso (kg)", min_value=0.0, value=18.14, format="%.2f")
                     c_desc = st.text_input("Descripción", placeholder="Ej: Caja Telescópica 22XU")
@@ -1603,24 +1601,41 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                     btn_guardar_carton = st.form_submit_button("💾 Guardar Cartón", use_container_width=True)
 
                     if btn_guardar_carton:
-                        if not c_tipo.strip():
-                            st.warning("⚠️ El campo 'Tipo' es obligatorio.")
+                        if not c_id.strip() or not c_tipo.strip():
+                            st.warning("⚠️ El ID y el Tipo de cartón son obligatorios.")
                         else:
                             try:
                                 _, sh, _ = get_db()
                                 ws_c = sh.worksheet("Catalogo_Carton")
                                 ensure_columns_exist(ws_c, ["id_carton", "tipo", "peso_kg", "descripcio"])
                                 
-                                nuevo_carton = {
-                                    "id_carton": next_id_carton,
-                                    "tipo": c_tipo.strip(),
-                                    "peso_kg": float(c_peso),
-                                    "descripcio": c_desc.strip()
-                                }
-                                append_row_dict_safe(ws_c, nuevo_carton)
-                                st.success(f"✅ ¡Cartón **{next_id_carton}** registrado con éxito!")
-                                st.cache_data.clear()
-                                st.rerun()
+                                df_actual_car, _ = get_df_safe("Catalogo_Carton")
+                                if not df_actual_car.empty and col_id_car in df_actual_car.columns:
+                                    ids_existentes_car = df_actual_car[col_id_car].astype(str).str.strip().values
+                                    if c_id.strip() in ids_existentes_car:
+                                        st.error(f"⚠️ El ID de cartón **{c_id.strip()}** ya se encuentra registrado en el catálogo.")
+                                    else:
+                                        nuevo_carton = {
+                                            "id_carton": c_id.strip(),
+                                            "tipo": c_tipo.strip(),
+                                            "peso_kg": float(c_peso),
+                                            "descripcio": c_desc.strip()
+                                        }
+                                        append_row_dict_safe(ws_c, nuevo_carton)
+                                        st.success(f"✅ ¡Cartón **{c_id.strip()}** registrado con éxito!")
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                else:
+                                    nuevo_carton = {
+                                        "id_carton": c_id.strip(),
+                                        "tipo": c_tipo.strip(),
+                                        "peso_kg": float(c_peso),
+                                        "descripcio": c_desc.strip()
+                                    }
+                                    append_row_dict_safe(ws_c, nuevo_carton)
+                                    st.success(f"✅ ¡Cartón **{c_id.strip()}** registrado con éxito!")
+                                    st.cache_data.clear()
+                                    st.rerun()
                             except Exception as e:
                                 st.error(f"Error al guardar el cartón: {e}")
 
@@ -1639,7 +1654,6 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                         else:
                             row_data = df_carton.iloc[0]
                         
-                        # Extracción segura de valores para evitar errores por nulos
                         val_peso = 18.14
                         if col_peso_car in row_data and pd.notna(row_data[col_peso_car]):
                             try:
