@@ -1166,9 +1166,14 @@ if st.session_state.rol == "OFICINA_CENTRAL":
         )
 
         st.subheader("⚙️ Gestión de Catálogos Maestros")
-        st.caption("Administre y actualice los registros principales del sistema (Clientes, Fincas, Equipos y Letras de Remisión).")
+        st.caption("Administre y actualice los registros principales del sistema (Clientes, Fincas, Equipos y Catálogo de Cartón).")
 
-        tab_cat1, tab_cat2, tab_cat3 = st.tabs(["👥 Clientes", "🏡 Fincas / Predios", "🚛 Equipos y Transporte"])
+        tab_cat1, tab_cat2, tab_cat3, tab_cat4 = st.tabs([
+            "👥 Clientes", 
+            "🏡 Fincas / Predios", 
+            "🚛 Equipos y Transporte", 
+            "📦 Catálogo de Cartón"
+        ])
 
         with tab_cat1:
             st.markdown("### 👥 Catálogo de Clientes (con Letra y Prefijo de Remisión)")
@@ -1270,7 +1275,68 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.dataframe(df_eq, use_container_width=True)
             else:
                 st.info("ℹ️ No hay equipos de transporte registrados actualmente.")
-                
+
+        with tab_cat4:
+            st.markdown("### 📦 Catálogo de Cartón")
+            
+            # Asegurar estructura de columnas para la hoja Catalogo_Carton
+            try:
+                _, sh_db, _ = get_db()
+                ws_carton = sh_db.worksheet("Catalogo_Carton")
+                ensure_columns_exist(ws_carton, ["id_carton", "tipo", "peso_kg", "descripcio"])
+            except Exception:
+                pass
+
+            df_carton, _ = get_df_safe("Catalogo_Carton")
+
+            # Cálculo automático del siguiente id_carton (ej. CAR-001, CAR-002...)
+            next_id_carton = "CAR-001"
+            if not df_carton.empty and "id_carton" in df_carton.columns:
+                try:
+                    nums = df_carton["id_carton"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+                    if not nums.empty:
+                        next_num = nums.max() + 1
+                        next_id_carton = f"CAR-{next_num:03d}"
+                    else:
+                        next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
+                except Exception:
+                    next_id_carton = f"CAR-{len(df_carton) + 1:03d}"
+
+            if not df_carton.empty:
+                st.dataframe(df_carton, use_container_width=True)
+            else:
+                st.info("ℹ️ No hay registros en el catálogo de cartón actualmente.")
+
+            st.markdown("#### ➕ Registrar Nuevo Tipo de Cartón")
+            with st.form("form_cat_carton"):
+                c_id = st.text_input("ID del Cartón (Generado Automáticamente)", value=next_id_carton, disabled=True)
+                c_tipo = st.text_input("Tipo de Cartón", placeholder="Ej: Telescópica 22XU")
+                c_peso = st.number_input("Peso (kg)", min_value=0.0, value=18.14, format="%.2f")
+                c_desc = st.text_input("Descripción", placeholder="Ej: Caja Telescópica 22XU")
+
+                btn_guardar_carton = st.form_submit_button("💾 Guardar Cartón", use_container_width=True)
+
+                if btn_guardar_carton:
+                    if not c_tipo.strip():
+                        st.warning("⚠️ El campo 'Tipo' es obligatorio.")
+                    else:
+                        try:
+                            _, sh, _ = get_db()
+                            ws_c = sh.worksheet("Catalogo_Carton")
+                            ensure_columns_exist(ws_c, ["id_carton", "tipo", "peso_kg", "descripcio"])
+                            
+                            nuevo_carton = {
+                                "id_carton": next_id_carton,
+                                "tipo": c_tipo.strip(),
+                                "peso_kg": float(c_peso),
+                                "descripcio": c_desc.strip()
+                            }
+                            
+                            append_row_dict_safe(ws_c, nuevo_carton)
+                            st.success(f"✅ ¡Cartón **{next_id_carton}** registrado con éxito!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al guardar el cartón: {e}")                
 # --------------------------------------------------------------------------
     # 6.6 Submódulo: 📈 Reportes y Concentrados Corporativos
     # --------------------------------------------------------------------------
