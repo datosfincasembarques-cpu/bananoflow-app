@@ -1144,10 +1144,10 @@ if st.session_state.rol == "OFICINA_CENTRAL":
                 st.dataframe(df_ordenes[cols_mostrar] if cols_mostrar else df_ordenes, use_container_width=True)                
                 
 
-    # --------------------------------------------------------------------------
-    # 6.5 Submódulo: ⚙️ Catálogos Maestros
-    # --------------------------------------------------------------------------
-    st.markdown("""
+   # --------------------------------------------------------------------------
+# 6.5 Submódulo: ⚙️ Catálogos Maestros
+# --------------------------------------------------------------------------
+st.markdown("""
 <style>
     /* Oculta los artefactos de texto de los iconos de Streamlit que se desbordan */
     [data-testid="stIconMaterial"] {
@@ -1155,403 +1155,459 @@ if st.session_state.rol == "OFICINA_CENTRAL":
     }
 </style>
 """, unsafe_allow_html=True)
-    if "Catálogos Maestros" in menu_sel:
-        # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
-        st.markdown(
-            """
-            <style>
-                html, body, [class*="css"] {
-                    font-family: Arial, sans-serif !important;
-                }
-                div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stTabs, div.dataframe {
-                    font-family: Arial, sans-serif !important;
-                }
-                table, th, td {
-                    font-family: Arial, sans-serif !important;
-                }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
 
-        st.subheader("⚙️ Gestión de Catálogos Maestros")
-        st.caption("Administre, actualice, edite y elimine los registros principales del sistema (Clientes, Fincas, Equipos y Cartón).")
+if "Catálogos Maestros" in menu_sel:
+    # Inyección de estilo global estricto para forzar la tipografía Arial en todo el submódulo
+    st.markdown(
+        """
+        <style>
+            html, body, [class*="css"] {
+                font-family: Arial, sans-serif !important;
+            }
+            div.stMarkdown, div.stText, span, p, label, div.stSelectbox, div.stTextInput, div.stNumberInput, div.stButton, div.stTabs, div.dataframe {
+                font-family: Arial, sans-serif !important;
+            }
+            table, th, td {
+                font-family: Arial, sans-serif !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-        tab_cat1, tab_cat2, tab_cat3, tab_cat4 = st.tabs([
-            "👥 Clientes", 
-            "🏡 Fincas / Predios", 
-            "🚛 Equipos y Transporte", 
-            "📦 Catálogo de Cartón"
-        ])
+    st.subheader("⚙️ Gestión de Catálogos Maestros")
+    st.caption("Administre, actualice, edite y elimine los registros principales del sistema (Clientes, Fincas, Equipos y Cartón).")
 
-        # ------------------------------------------------------------------
-        # TAB 1: CLIENTES
-        # ------------------------------------------------------------------
-        with tab_cat1:
-            st.markdown("### 👥 Catálogo de Clientes (con Letra y Prefijo de Remisión)")
-            
+    tab_cat1, tab_cat2, tab_cat3, tab_cat4 = st.tabs([
+        "👥 Clientes", 
+        "🏡 Fincas / Predios", 
+        "🚛 Equipos y Transporte", 
+        "📦 Catálogo de Cartón"
+    ])
+
+    # ------------------------------------------------------------------
+    # TAB 1: CLIENTES (Base de Datos Local SQLite)
+    # ------------------------------------------------------------------
+    with tab_cat1:
+        st.markdown("### 👥 Catálogo de Clientes (con Letra y Prefijo de Remisión)")
+
+        def init_db_clientes():
+            """Crea la tabla de Clientes si no existe."""
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS Clientes (
+                    id_cliente TEXT PRIMARY KEY,
+                    razon_social TEXT,
+                    rfc TEXT,
+                    domicilio TEXT,
+                    contacto TEXT,
+                    telefono TEXT,
+                    letra_remision TEXT
+                )
+            ''')
+            conn.commit()
+            conn.close()
+
+        # Inicializar la tabla localmente
+        init_db_clientes()
+
+        # Cargar datos de la base de datos local
+        try:
+            conn = get_connection()
+            df_cli = pd.read_sql("SELECT * FROM Clientes", conn)
+            conn.close()
+        except Exception:
+            df_cli = pd.DataFrame(columns=["id_cliente", "razon_social", "rfc", "domicilio", "contacto", "telefono", "letra_remision"])
+
+        next_id_cli = "CLI-001"
+        if not df_cli.empty and "id_cliente" in df_cli.columns:
             try:
-                _, sh_db, _ = get_db()
-                ws_cli = sh_db.worksheet("Clientes")
-                ensure_columns_exist(ws_cli, ["id_cliente", "razon_social", "rfc", "domicilio", "contacto", "telefono", "letra_remision"])
-            except Exception:
-                pass
-
-            df_cli, _ = get_df_safe("Clientes")
-
-            next_id_cli = "CLI-001"
-            if not df_cli.empty and "id_cliente" in df_cli.columns:
-                try:
-                    nums = df_cli["id_cliente"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
-                    if not nums.empty:
-                        next_id_cli = f"CLI-{nums.max() + 1:03d}"
-                    else:
-                        next_id_cli = f"CLI-{len(df_cli) + 1:03d}"
-                except Exception:
+                nums = df_cli["id_cliente"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+                if not nums.empty:
+                    next_id_cli = f"CLI-{nums.max() + 1:03d}"
+                else:
                     next_id_cli = f"CLI-{len(df_cli) + 1:03d}"
-
-            if not df_cli.empty:
-                st.dataframe(df_cli, use_container_width=True)
-            else:
-                st.info("ℹ️ No hay clientes registrados actualmente en la base de datos.")
-
-            with st.expander("➕ Registrar Nuevo Cliente", expanded=False):
-                with st.form("form_cat_cliente"):
-                    cc1, cc2 = st.columns(2)
-                    with cc1:
-                        cli_id = st.text_input("ID del Cliente (Generado Automáticamente)", value=next_id_cli, disabled=True)
-                        cli_razon = st.text_input("Razón Social", placeholder="Ej: Empresa La Rioja")
-                        cli_rfc = st.text_input("RFC", placeholder="Ej: RIO260101XXX")
-                    with cc2:
-                        cli_dom = st.text_input("Domicilio", placeholder="Ej: Carretera Principal Km 5")
-                        cli_cont = st.text_input("Contacto", placeholder="Ej: Juan Pérez")
-                        cli_tel = st.text_input("Teléfono", placeholder="Ej: 9991234567")
-                        cli_letra = st.text_input("Letra / Prefijo de Remisión", placeholder="Ej: Z102 o Y123")
-
-                    btn_guardar_cli = st.form_submit_button("💾 Guardar Cliente", use_container_width=True)
-
-                    if btn_guardar_cli:
-                        if not cli_razon.strip():
-                            st.warning("⚠️ La Razón Social es obligatoria.")
-                        else:
-                            try:
-                                _, sh, _ = get_db()
-                                ws_c = sh.worksheet("Clientes")
-                                ensure_columns_exist(ws_c, ["id_cliente", "razon_social", "rfc", "domicilio", "contacto", "telefono", "letra_remision"])
-                                
-                                nuevo_registro = {
-                                    "id_cliente": next_id_cli,
-                                    "razon_social": cli_razon.strip(),
-                                    "rfc": cli_rfc.strip(),
-                                    "domicilio": cli_dom.strip(),
-                                    "contacto": cli_cont.strip(),
-                                    "telefono": cli_tel.strip(),
-                                    "letra_remision": cli_letra.strip().upper()
-                                }
-                                append_row_dict_safe(ws_c, nuevo_registro)
-                                st.success(f"✅ ¡Cliente **{next_id_cli}** registrado con éxito!")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error al guardar el cliente: {e}")
-
-            if not df_cli.empty:
-                with st.expander("✏️ Modificar o 🗑️ Eliminar Cliente Existente", expanded=False):
-                    lista_clientes = df_cli["id_cliente"].astype(str) + " - " + df_cli["razon_social"].astype(str)
-                    cli_seleccionado = st.selectbox("Seleccione el Cliente a Gestionar", options=lista_clientes)
-                    
-                    if cli_seleccionado:
-                        id_cli_sel = cli_seleccionado.split(" - ")[0]
-                        row_cli = df_cli[df_cli["id_cliente"].astype(str) == id_cli_sel].iloc[0]
-                        
-                        with st.form("form_editar_cliente"):
-                            ec1, ec2 = st.columns(2)
-                            with ec1:
-                                edit_razon = st.text_input("Razón Social", value=str(row_cli["razon_social"]))
-                                edit_rfc = st.text_input("RFC", value=str(row_cli["rfc"]))
-                                edit_dom = st.text_input("Domicilio", value=str(row_cli["domicilio"]))
-                            with ec2:
-                                edit_cont = st.text_input("Contacto", value=str(row_cli["contacto"]))
-                                edit_tel = st.text_input("Teléfono", value=str(row_cli["telefono"]))
-                                edit_letra = st.text_input("Letra / Prefijo de Remisión", value=str(row_cli["letra_remision"]))
-                            
-                            c_b1, c_b2 = st.columns(2)
-                            with c_b1:
-                                btn_act_cli = st.form_submit_button("💾 Actualizar Cambios", use_container_width=True)
-                            with c_b2:
-                                btn_del_cli = st.form_submit_button("🗑️ Eliminar Cliente", use_container_width=True)
-                                
-                            if btn_act_cli:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_c = sh.worksheet("Clientes")
-                                    cell_c = ws_c.find(str(id_cli_sel))
-                                    if cell_c:
-                                        row_idx = cell_c.row
-                                        header_vals = ws_c.row_values(1)
-                                        actualizaciones = {
-                                            "razon_social": edit_razon.strip(),
-                                            "rfc": edit_rfc.strip(),
-                                            "domicilio": edit_dom.strip(),
-                                            "contacto": edit_cont.strip(),
-                                            "telefono": edit_tel.strip(),
-                                            "letra_remision": edit_letra.strip().upper()
-                                        }
-                                        for k, v in actualizaciones.items():
-                                            if k in header_vals:
-                                                c_idx = header_vals.index(k) + 1
-                                                ws_c.update_cell(row_idx, c_idx, v)
-                                        st.success(f"✅ ¡Cliente **{id_cli_sel}** actualizado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro.")
-                                except Exception as e:
-                                    st.error(f"Error al actualizar: {e}")
-                                    
-                            if btn_del_cli:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_c = sh.worksheet("Clientes")
-                                    cell_c = ws_c.find(str(id_cli_sel))
-                                    if cell_c:
-                                        ws_c.delete_rows(cell_c.row)
-                                        st.success(f"🗑️ ¡Cliente **{id_cli_sel}** eliminado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro para eliminar.")
-                                except Exception as e:
-                                    st.error(f"Error al eliminar: {e}")
-
-        # ------------------------------------------------------------------
-        # TAB 2: FINCAS (Con detección segura de columnas)
-        # ------------------------------------------------------------------
-        with tab_cat2:
-            st.markdown("### 🏡 Catálogo de Fincas")
-            
-            try:
-                _, sh_db, _ = get_db()
-                ws_finca = sh_db.worksheet("Fincas")
-                ensure_columns_exist(ws_finca, ["id_finca", "nombre_finca"])
             except Exception:
-                pass
+                next_id_cli = f"CLI-{len(df_cli) + 1:03d}"
 
-            df_fin, _ = get_df_safe("Fincas")
+        if not df_cli.empty:
+            st.dataframe(df_cli, use_container_width=True)
+        else:
+            st.info("ℹ️ No hay clientes registrados actualmente en la base de datos.")
 
-            # Detección dinámica y segura de columnas para evitar KeyErrors con hojas existentes
-            col_id_fin = "id_finca"
-            col_nom_fin = "nombre_finca"
-            if not df_fin.empty:
-                cols_fin = [str(c).strip() for c in df_fin.columns]
-                col_id_fin = next((c for c in cols_fin if 'id' in c.lower() or 'codigo' in c.lower() or 'finca' in c.lower()), cols_fin[0])
-                col_nom_fin = next((c for c in cols_fin if 'nom' in c.lower() or 'desc' in c.lower() or (c.lower() != col_id_fin.lower())), cols_fin[1] if len(cols_fin) > 1 else cols_fin[0])
+        with st.expander("➕ Registrar Nuevo Cliente", expanded=False):
+            with st.form("form_cat_cliente"):
+                cc1, cc2 = st.columns(2)
+                with cc1:
+                    cli_id = st.text_input("ID del Cliente (Generado Automáticamente)", value=next_id_cli, disabled=True)
+                    cli_razon = st.text_input("Razón Social", placeholder="Ej: Empresa La Rioja")
+                    cli_rfc = st.text_input("RFC", placeholder="Ej: RIO260101XXX")
+                with cc2:
+                    cli_dom = st.text_input("Domicilio", placeholder="Ej: Carretera Principal Km 5")
+                    cli_cont = st.text_input("Contacto", placeholder="Ej: Juan Pérez")
+                    cli_tel = st.text_input("Teléfono", placeholder="Ej: 9991234567")
+                    cli_letra = st.text_input("Letra / Prefijo de Remisión", placeholder="Ej: Z102 o Y123")
 
-            next_id_fin = "FIN-01"
-            if not df_fin.empty and col_id_fin in df_fin.columns:
-                try:
-                    nums = df_fin[col_id_fin].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
-                    if not nums.empty:
-                        next_id_fin = f"FIN-{nums.max() + 1:02d}"
+                btn_guardar_cli = st.form_submit_button("💾 Guardar Cliente", use_container_width=True)
+
+                if btn_guardar_cli:
+                    if not cli_razon.strip():
+                        st.warning("⚠️ La Razón Social es obligatoria.")
                     else:
-                        next_id_fin = f"FIN-{len(df_fin) + 1:02d}"
-                except Exception:
-                    next_id_fin = f"FIN-{len(df_fin) + 1:02d}"
+                        try:
+                            conn = get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                """
+                                INSERT OR REPLACE INTO Clientes (id_cliente, razon_social, rfc, domicilio, contacto, telefono, letra_remision)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    next_id_cli,
+                                    cli_razon.strip(),
+                                    cli_rfc.strip(),
+                                    cli_dom.strip(),
+                                    cli_cont.strip(),
+                                    cli_tel.strip(),
+                                    cli_letra.strip().upper()
+                                )
+                            )
+                            conn.commit()
+                            conn.close()
+                            
+                            st.success(f"✅ ¡Cliente **{next_id_cli}** registrado con éxito!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al guardar el cliente: {e}")
 
-            if not df_fin.empty:
-                st.dataframe(df_fin, use_container_width=True)
-            else:
-                st.info("ℹ️ No hay fincas registradas actualmente.")
-
-            with st.expander("➕ Registrar Nueva Finca", expanded=False):
-                with st.form("form_cat_finca"):
-                    f_id = st.text_input("ID o Código de Finca (Generado Automáticamente)", value=next_id_fin, disabled=True)
-                    f_nombre = st.text_input("Nombre de la Finca", placeholder="Ej: Doña Emilia")
-                    btn_finca = st.form_submit_button("💾 Guardar Finca", use_container_width=True)
-                    if btn_finca:
-                        if not f_nombre.strip():
-                            st.warning("⚠️ Ingrese el nombre de la finca.")
-                        else:
+        if not df_cli.empty:
+            with st.expander("✏️ Modificar o 🗑️ Eliminar Cliente Existente", expanded=False):
+                lista_clientes = df_cli["id_cliente"].astype(str) + " - " + df_cli["razon_social"].astype(str)
+                cli_seleccionado = st.selectbox("Seleccione el Cliente a Gestionar", options=lista_clientes)
+                
+                if cli_seleccionado:
+                    id_cli_sel = cli_seleccionado.split(" - ")[0]
+                    row_cli = df_cli[df_cli["id_cliente"].astype(str) == id_cli_sel].iloc[0]
+                    
+                    with st.form("form_editar_cliente"):
+                        ec1, ec2 = st.columns(2)
+                        with ec1:
+                            edit_razon = st.text_input("Razón Social", value=str(row_cli["razon_social"]))
+                            edit_rfc = st.text_input("RFC", value=str(row_cli["rfc"]))
+                            edit_dom = st.text_input("Domicilio", value=str(row_cli["domicilio"]))
+                        with ec2:
+                            edit_cont = st.text_input("Contacto", value=str(row_cli["contacto"]))
+                            edit_tel = st.text_input("Teléfono", value=str(row_cli["telefono"]))
+                            edit_letra = st.text_input("Letra / Prefijo de Remisión", value=str(row_cli["letra_remision"]))
+                        
+                        c_b1, c_b2 = st.columns(2)
+                        with c_b1:
+                            btn_act_cli = st.form_submit_button("💾 Actualizar Cambios", use_container_width=True)
+                        with c_b2:
+                            btn_del_cli = st.form_submit_button("🗑️ Eliminar Cliente", use_container_width=True)
+                            
+                        if btn_act_cli:
                             try:
-                                _, sh, _ = get_db()
-                                ws_f = sh.worksheet("Fincas")
-                                ensure_columns_exist(ws_f, ["id_finca", "nombre_finca"])
-                                append_row_dict_safe(ws_f, {"id_finca": next_id_fin, "nombre_finca": f_nombre.strip()})
-                                st.success(f"✅ Finca **{f_nombre}** registrada correctamente.")
-                                st.cache_data.clear()
+                                conn = get_connection()
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    """
+                                    UPDATE Clientes 
+                                    SET razon_social = ?, rfc = ?, domicilio = ?, contacto = ?, telefono = ?, letra_remision = ?
+                                    WHERE id_cliente = ?
+                                    """,
+                                    (
+                                        edit_razon.strip(),
+                                        edit_rfc.strip(),
+                                        edit_dom.strip(),
+                                        edit_cont.strip(),
+                                        edit_tel.strip(),
+                                        edit_letra.strip().upper(),
+                                        str(id_cli_sel)
+                                    )
+                                )
+                                conn.commit()
+                                conn.close()
+                                
+                                st.success(f"✅ ¡Cliente **{id_cli_sel}** actualizado con éxito!")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Error: {e}")
-
-            if not df_fin.empty:
-                with st.expander("✏️ Modificar o 🗑️ Eliminar Finca Existente", expanded=False):
-                    lista_fincas = df_fin[col_id_fin].astype(str) + " - " + df_fin[col_nom_fin].astype(str)
-                    finca_sel = st.selectbox("Seleccione la Finca a Gestionar", options=lista_fincas)
-                    
-                    if finca_sel:
-                        id_finca_sel = finca_sel.split(" - ")[0]
-                        row_fin = df_fin[df_fin[col_id_fin].astype(str) == id_finca_sel].iloc[0]
-                        
-                        with st.form("form_editar_finca"):
-                            edit_nombre_finca = st.text_input("Nombre de la Finca", value=str(row_fin[col_nom_fin]))
-                            
-                            fb1, fb2 = st.columns(2)
-                            with fb1:
-                                btn_act_fin = st.form_submit_button("💾 Actualizar Finca", use_container_width=True)
-                            with fb2:
-                                btn_del_fin = st.form_submit_button("🗑️ Eliminar Finca", use_container_width=True)
+                                st.error(f"Error al actualizar: {e}")
                                 
-                            if btn_act_fin:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_f = sh.worksheet("Fincas")
-                                    cell_f = ws_f.find(str(id_finca_sel))
-                                    if cell_f:
-                                        row_idx = cell_f.row
-                                        header_vals = ws_f.row_values(1)
-                                        target_col_name = "nombre_finca" if "nombre_finca" in header_vals else col_nom_fin
-                                        if target_col_name in header_vals:
-                                            c_idx = header_vals.index(target_col_name) + 1
-                                            ws_f.update_cell(row_idx, c_idx, edit_nombre_finca.strip())
-                                        st.success(f"✅ ¡Finca **{id_finca_sel}** actualizada con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro.")
-                                except Exception as e:
-                                    st.error(f"Error al actualizar: {e}")
-                                    
-                            if btn_del_fin:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_f = sh.worksheet("Fincas")
-                                    cell_f = ws_f.find(str(id_finca_sel))
-                                    if cell_f:
-                                        ws_f.delete_rows(cell_f.row)
-                                        st.success(f"🗑️ ¡Finca **{id_finca_sel}** eliminada con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro para eliminar.")
-                                except Exception as e:
-                                    st.error(f"Error al eliminar: {e}")
+                        if btn_del_cli:
+                            try:
+                                conn = get_connection()
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM Clientes WHERE id_cliente = ?", (str(id_cli_sel),))
+                                conn.commit()
+                                conn.close()
+                                
+                                st.success(f"🗑️ ¡Cliente **{id_cli_sel}** eliminado con éxito!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al eliminar: {e}")
 
-        # ------------------------------------------------------------------
-        # TAB 3: EQUIPOS Y TRANSPORTE (Tractores)
-        # ------------------------------------------------------------------
-        with tab_cat3:
-            st.markdown("### 🚛 Catálogo de Equipos y Transporte")
+
+# ------------------------------------------------------------------
+# TAB 2: FINCAS (Base de Datos Local SQLite)
+# ------------------------------------------------------------------
+st.markdown("### 🏡 Catálogo de Fincas")
+
+def init_db_fincas():
+    """Crea la tabla de Fincas si no existe."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Fincas (
+            id_finca TEXT PRIMARY KEY,
+            nombre_finca TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Inicializar la tabla localmente
+init_db_fincas()
+
+# Cargar datos de la base de datos local
+try:
+    conn = get_connection()
+    df_fin = pd.read_sql("SELECT * FROM Fincas", conn)
+    conn.close()
+except Exception:
+    df_fin = pd.DataFrame(columns=["id_finca", "nombre_finca"])
+
+# Generar el próximo ID de forma segura
+next_id_fin = "FIN-01"
+if not df_fin.empty and "id_finca" in df_fin.columns:
+    try:
+        nums = df_fin["id_finca"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+        if not nums.empty:
+            next_id_fin = f"FIN-{nums.max() + 1:02d}"
+        else:
+            next_id_fin = f"FIN-{len(df_fin) + 1:02d}"
+    except Exception:
+        next_id_fin = f"FIN-{len(df_fin) + 1:02d}"
+
+if not df_fin.empty:
+    st.dataframe(df_fin, use_container_width=True)
+else:
+    st.info("ℹ️ No hay fincas registradas actualmente.")
+
+with st.expander("➕ Registrar Nueva Finca", expanded=False):
+    with st.form("form_cat_finca"):
+        f_id = st.text_input("ID o Código de Finca (Generado Automáticamente)", value=next_id_fin, disabled=True)
+        f_nombre = st.text_input("Nombre de la Finca", placeholder="Ej: Doña Emilia")
+        btn_finca = st.form_submit_button("💾 Guardar Finca", use_container_width=True)
+        
+        if btn_finca:
+            if not f_nombre.strip():
+                st.warning("⚠️ Ingrese el nombre de la finca.")
+            else:
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO Fincas (id_finca, nombre_finca) VALUES (?, ?)",
+                        (next_id_fin, f_nombre.strip())
+                    )
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"✅ Finca **{f_nombre}** registrada correctamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+if not df_fin.empty:
+    with st.expander("✏️ Modificar o 🗑️ Eliminar Finca Existente", expanded=False):
+        lista_fincas = df_fin["id_finca"].astype(str) + " - " + df_fin["nombre_finca"].astype(str)
+        finca_sel = st.selectbox("Seleccione la Finca a Gestionar", options=lista_fincas)
+        
+        if finca_sel:
+            id_finca_sel = finca_sel.split(" - ")[0]
+            row_fin = df_fin[df_fin["id_finca"].astype(str) == id_finca_sel].iloc[0]
             
-            try:
-                _, sh_db, _ = get_db()
-                ws_eq = sh_db.worksheet("Tractores")
-                ensure_columns_exist(ws_eq, ["id_tractor", "nombre_tractor", "tipo"])
-            except Exception:
-                pass
-
-            df_eq, _ = get_df_safe("Tractores")
-
-            next_id_eq = "TRAC-01"
-            if not df_eq.empty and "id_tractor" in df_eq.columns:
-                try:
-                    nums = df_eq["id_tractor"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
-                    if not nums.empty:
-                        next_id_eq = f"TRAC-{nums.max() + 1:02d}"
-                    else:
-                        next_id_eq = f"TRAC-{len(df_eq) + 1:02d}"
-                except Exception:
-                    next_id_eq = f"TRAC-{len(df_eq) + 1:02d}"
-
-            if not df_eq.empty:
-                st.dataframe(df_eq, use_container_width=True)
-            else:
-                st.info("ℹ️ No hay equipos de transporte registrados actualmente.")
-
-            with st.expander("➕ Registrar Nuevo Equipo / Tractor", expanded=False):
-                with st.form("form_cat_tractor"):
-                    eq_id = st.text_input("ID del Equipo (Generado Automáticamente)", value=next_id_eq, disabled=True)
-                    eq_nombre = st.text_input("Nombre / Descripción del Tractor o Equipo", placeholder="Ej: Tractor John Deere 01")
-                    eq_tipo = st.text_input("Tipo", placeholder="Ej: Tractor / Camión")
-                    btn_tractor = st.form_submit_button("💾 Guardar Equipo", use_container_width=True)
-                    if btn_tractor:
-                        if not eq_nombre.strip():
-                            st.warning("⚠️ Ingrese el nombre del equipo.")
-                        else:
-                            try:
-                                _, sh, _ = get_db()
-                                ws_t = sh.worksheet("Tractores")
-                                ensure_columns_exist(ws_t, ["id_tractor", "nombre_tractor", "tipo"])
-                                
-                                nuevo_eq = {
-                                    "id_tractor": next_id_eq,
-                                    "nombre_tractor": eq_nombre.strip(),
-                                    "tipo": eq_tipo.strip()
-                                }
-                                append_row_dict_safe(ws_t, nuevo_eq)
-                                st.success(f"✅ Equipo **{eq_nombre}** registrado correctamente.")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-
-            if not df_eq.empty:
-                with st.expander("✏️ Modificar o 🗑️ Eliminar Equipo Existente", expanded=False):
-                    lista_eq = df_eq["id_tractor"].astype(str) + " - " + df_eq["nombre_tractor"].astype(str)
-                    eq_sel = st.selectbox("Seleccione el Equipo a Gestionar", options=lista_eq)
+            with st.form("form_editar_finca"):
+                edit_nombre_finca = st.text_input("Nombre de la Finca", value=str(row_fin["nombre_finca"]))
+                
+                fb1, fb2 = st.columns(2)
+                with fb1:
+                    btn_act_fin = st.form_submit_button("💾 Actualizar Finca", use_container_width=True)
+                with fb2:
+                    btn_del_fin = st.form_submit_button("🗑️ Eliminar Finca", use_container_width=True)
                     
-                    if eq_sel:
-                        id_eq_sel = eq_sel.split(" - ")[0]
-                        row_eq = df_eq[df_eq["id_tractor"].astype(str) == id_eq_sel].iloc[0]
+                if btn_act_fin:
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "UPDATE Fincas SET nombre_finca = ? WHERE id_finca = ?",
+                            (edit_nombre_finca.strip(), str(id_finca_sel))
+                        )
+                        conn.commit()
+                        conn.close()
                         
-                        with st.form("form_editar_tractor"):
-                            edit_nom_eq = st.text_input("Nombre / Descripción", value=str(row_eq["nombre_tractor"]))
-                            edit_tipo_eq = st.text_input("Tipo", value=str(row_eq["tipo"]))
-                            
-                            tb1, tb2 = st.columns(2)
-                            with tb1:
-                                btn_act_eq = st.form_submit_button("💾 Actualizar Equipo", use_container_width=True)
-                            with tb2:
-                                btn_del_eq = st.form_submit_button("🗑️ Eliminar Equipo", use_container_width=True)
-                                
-                            if btn_act_eq:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_t = sh.worksheet("Tractores")
-                                    cell_t = ws_t.find(str(id_eq_sel))
-                                    if cell_t:
-                                        row_idx = cell_t.row
-                                        header_vals = ws_t.row_values(1)
-                                        actualizaciones = {
-                                            "nombre_tractor": edit_nom_eq.strip(),
-                                            "tipo": edit_tipo_eq.strip()
-                                        }
-                                        for k, v in actualizaciones.items():
-                                            if k in header_vals:
-                                                c_idx = header_vals.index(k) + 1
-                                                ws_t.update_cell(row_idx, c_idx, v)
-                                        st.success(f"✅ ¡Equipo **{id_eq_sel}** actualizado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro.")
-                                except Exception as e:
-                                    st.error(f"Error al actualizar: {e}")
-                                    
-                            if btn_del_eq:
-                                try:
-                                    _, sh, _ = get_db()
-                                    ws_t = sh.worksheet("Tractores")
-                                    cell_t = ws_t.find(str(id_eq_sel))
-                                    if cell_t:
-                                        ws_t.delete_rows(cell_t.row)
-                                        st.success(f"🗑️ ¡Equipo **{id_eq_sel}** eliminado con éxito!")
-                                        st.cache_data.clear()
-                                        st.rerun()
-                                    else:
-                                        st.error("No se encontró el registro para eliminar.")
-                                except Exception as e:
-                                    st.error(f"Error al eliminar: {e}")
+                        st.success(f"✅ ¡Finca **{id_finca_sel}** actualizada con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al actualizar: {e}")
+                        
+                if btn_del_fin:
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM Fincas WHERE id_finca = ?", (str(id_finca_sel),))
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success(f"🗑️ ¡Finca **{id_finca_sel}** eliminada con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al eliminar: {e}")
+#=================================================================================================
+     import streamlit as st
+import pandas as pd
+import sqlite3
 
+# ==========================================
+# CONFIGURACIÓN DE BASE DE DATOS LOCAL
+# ==========================================
+DB_NAME = "banano_Embarques.db"
+
+def get_connection():
+    """Establece y retorna la conexión con la base de datos SQLite local."""
+    return sqlite3.connect(DB_NAME)
+
+def init_db_tractores():
+    """Crea la tabla de Tractores si no existe."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Tractores (
+            id_tractor TEXT PRIMARY KEY,
+            nombre_tractor TEXT,
+            tipo TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Inicializar la tabla localmente
+init_db_tractores()
+
+# Estilo global Arial
+st.markdown("""
+    <style>
+    html, body, [class*="css"] {
+        font-family: Arial, sans-serif;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ------------------------------------------------------------------
+# TAB 3: EQUIPOS Y TRANSPORTE (Tractores)
+# ------------------------------------------------------------------
+st.markdown("### 🚛 Catálogo de Equipos y Transporte")
+
+# Cargar datos de la base de datos local
+try:
+    conn = get_connection()
+    df_eq = pd.read_sql("SELECT * FROM Tractores", conn)
+    conn.close()
+except Exception:
+    df_eq = pd.DataFrame(columns=["id_tractor", "nombre_tractor", "tipo"])
+
+next_id_eq = "TRAC-01"
+if not df_eq.empty and "id_tractor" in df_eq.columns:
+    try:
+        nums = df_eq["id_tractor"].astype(str).str.extract(r'(\d+)')[0].dropna().astype(int)
+        if not nums.empty:
+            next_id_eq = f"TRAC-{nums.max() + 1:02d}"
+        else:
+            next_id_eq = f"TRAC-{len(df_eq) + 1:02d}"
+    except Exception:
+        next_id_eq = f"TRAC-{len(df_eq) + 1:02d}"
+
+if not df_eq.empty:
+    st.dataframe(df_eq, use_container_width=True)
+else:
+    st.info("ℹ️ No hay equipos de transporte registrados actualmente.")
+
+with st.expander("➕ Registrar Nuevo Equipo / Tractor", expanded=False):
+    with st.form("form_cat_tractor"):
+        eq_id = st.text_input("ID del Equipo (Generado Automáticamente)", value=next_id_eq, disabled=True)
+        eq_nombre = st.text_input("Nombre / Descripción del Tractor o Equipo", placeholder="Ej: Tractor John Deere 01")
+        eq_tipo = st.text_input("Tipo", placeholder="Ej: Tractor / Camión")
+        btn_tractor = st.form_submit_button("💾 Guardar Equipo", use_container_width=True)
+        
+        if btn_tractor:
+            if not eq_nombre.strip():
+                st.warning("⚠️ Ingrese el nombre del equipo.")
+            else:
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO Tractores (id_tractor, nombre_tractor, tipo) VALUES (?, ?, ?)",
+                        (next_id_eq, eq_nombre.strip(), eq_tipo.strip())
+                    )
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"✅ Equipo **{eq_nombre}** registrado correctamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+if not df_eq.empty:
+    with st.expander("✏️ Modificar o 🗑️ Eliminar Equipo Existente", expanded=False):
+        lista_eq = df_eq["id_tractor"].astype(str) + " - " + df_eq["nombre_tractor"].astype(str)
+        eq_sel = st.selectbox("Seleccione el Equipo a Gestionar", options=lista_eq)
+        
+        if eq_sel:
+            id_eq_sel = eq_sel.split(" - ")[0]
+            row_eq = df_eq[df_eq["id_tractor"].astype(str) == id_eq_sel].iloc[0]
+            
+            with st.form("form_editar_tractor"):
+                edit_nom_eq = st.text_input("Nombre / Descripción", value=str(row_eq["nombre_tractor"]))
+                edit_tipo_eq = st.text_input("Tipo", value=str(row_eq["tipo"]))
+                
+                tb1, tb2 = st.columns(2)
+                with tb1:
+                    btn_act_eq = st.form_submit_button("💾 Actualizar Equipo", use_container_width=True)
+                with tb2:
+                    btn_del_eq = st.form_submit_button("🗑️ Eliminar Equipo", use_container_width=True)
+                    
+                if btn_act_eq:
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "UPDATE Tractores SET nombre_tractor = ?, tipo = ? WHERE id_tractor = ?",
+                            (edit_nom_eq.strip(), edit_tipo_eq.strip(), str(id_eq_sel))
+                        )
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success(f"✅ ¡Equipo **{id_eq_sel}** actualizado con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al actualizar: {e}")
+                        
+                if btn_del_eq:
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM Tractores WHERE id_tractor = ?", (str(id_eq_sel),))
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success(f"🗑️ ¡Equipo **{id_eq_sel}** eliminado con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al eliminar: {e}")
     # ------------------------------------------------------------------
 # TAB 4: CATÁLOGO DE CARTÓN (Solo muestra Código y Nombre/Tipo en pantalla)
 # ------------------------------------------------------------------
